@@ -19,74 +19,104 @@ use strum::{VariantArray};
 mod service_center;
 use service_center::ServiceCenter;
 
+use crate::PageOption::{AddNewTransport, MainMenu};
+
 fn main() -> io::Result<()> {
     ratatui::run(|terminal| App::new().run(terminal))
 }
 
-type RcPSt = Rc<dyn PageState>;
-
-trait PageState {
-    fn new() -> RcPSt where Self: Sized;
+trait IPage {
     fn draw(&self, frame: &mut Frame, sc: &mut ServiceCenter);
     fn handle_key_event(&mut self, key_event: KeyEvent, sc: &mut ServiceCenter);
-    fn back(&self, sc: &mut ServiceCenter) -> RcPSt; // Esc pressed
-    fn move_to(&self, sc: &mut ServiceCenter) -> Option<RcPSt>;
+    fn back(&self) -> PageOption;
+    fn move_to(&self, sc: &mut ServiceCenter) -> Action;
 }
 
+struct ListPage {
+    options: Vec<(String, Action)>,
+    cur: usize,
+    title: String,
+    backpage: PageOption,
+    moving: Action
+}
 
-trait PageMenuState : PageState {
-    fn items_list(&self) -> Vec<String>;
-    fn items_cnt(&self) -> usize;
-    fn cur_item(&self) -> usize;
-    fn set_cur_item(&self, new_cur: usize);
-    fn move_to_item(&self, sc: &mut ServiceCenter);
-    fn title(&self) -> String;
+impl IPage for ListPage {
     fn draw(&self, frame: &mut Frame, sc: &mut ServiceCenter) {
-        let items: Vec<String> = self.items_list()
-        .iter()
-        .map(|option| {
-            option.to_string()
-        })
-        .collect();
 
-        let list = List::new(items)
-            .block(Block::default().title(self.title()).borders(Borders::ALL))
-            .highlight_style(Style::default().bg(ratatui::style::Color::Yellow).fg(ratatui::style::Color::Black))
-            .highlight_symbol(">> ");
-
-        frame.render_widget(list, frame.area());
     }
     fn handle_key_event(&mut self, key_event: KeyEvent, sc: &mut ServiceCenter) {
-        match key_event.code {
-            KeyCode::Up => self.set_cur_item(std::cmp::max(self.cur_item() - 1, 0)),
-            KeyCode::Down => self.set_cur_item(std::cmp::min(self.items_cnt() - 1, self.cur_item() + 1)),
-            KeyCode::Enter => self.move_to_item(sc),
-            _ => {}
+        Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
+                match key_event.code {
+                    KeyCode::Up => cur -= 1,
+                    KeyCode::Down => cur += 1,
+                    KeyCode::Enter | KeyCode::Space | KeyCode::Right => {
+                        self.moving = self.options[cur].1
+                    }
+                }
+            }
+    }
+    fn back(&self) -> PageOption {
+        self.backpage
+    }
+    fn move_to(&self, sc: &mut ServiceCenter) -> Action {
+        self.moving
+    }
+}
+
+struct FormPage {
+    title: String
+}
+
+struct TextPage {
+    text: String
+}
+
+enum Page {
+    List(ListPage),
+    Form(FormPage),
+    Text(TextPage)
+}
+
+impl IPage for Page {
+    fn draw(&self, frame: &mut Frame, sc: &mut ServiceCenter) {
+        match self {
+            Page::List(p) => p.draw(frame, sc),
+            Page::Form(p) => p.draw(frame, sc),
+            Page::Text(p) => p.draw(frame, sc)
+        }
+    }
+    fn handle_key_event(&mut self, key_event: KeyEvent, sc: &mut ServiceCenter) {
+        match self {
+            Page::List(p) => p.handle_key_event(key_event, sc),
+            Page::Form(p) => p.handle_key_event(key_event, sc),
+            Page::Text(p) => p.handle_key_event(key_event, sc)
+        }
+    }
+    fn back(&self) -> PageOption {
+        match Self {
+            Page::List(p) => p.back(),
+            Page::Form(p) => p.back(),
+            Page::Text(p) => p.back()
+        }
+    }
+    fn move_to(&self, sc: &mut ServiceCenter) -> Action {
+        match self {
+            Page::List(p) => p.move_to(sc),
+            Page::Form(p) => p.move_to(sc),
+            Page::Text(p) => p.move_to(sc)
         }
     }
 }
 
-
-trait PageFormState<'a> : PageState {
-    fn title(&self) -> String;
-    fn active_textarea_mut(&mut self) -> &mut TextArea<'a>;
-    fn textarea_list(&self) -> &[TextArea<'a>];
-    fn handle_key_event(&mut self, key: KeyEvent, sc: &mut ServiceCenter) {
-        if key.kind == KeyEventKind::Press {
-            match key.code {
-                KeyCode::Enter | KeyCode::Tab => {
-                    self.next_focus();
-                }
-                _ => {
-                    self.active_textarea_mut().input(key);
-                }
-            }
-        }
-    }
+enum Action {
+    None,
+    Back,
+    Quit,
+    Go(PageOption)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter, Display, Default)]
-enum MainMenuPagesOption {
+enum PageOption {
     #[strum(to_string = "главное меню")]
     #[default]
     MainMenu,
@@ -103,102 +133,46 @@ enum MainMenuPagesOption {
     #[strum(to_string = "о нас")]
     AboutUs,
     #[strum(to_string = "выход (exit)")]
-    Exit(ExitPage)
-}
-
-struct ExitPage;
-
-impl PageState for ExitPage {
-    fn new() -> RcPSt {
-        Rc::new(ExitPage)
-    }
-    fn draw(&self, frame: &mut Frame, sc: &mut ServiceCenter) {
-
-    }
-    fn handle_key_event(&mut self, key_event: KeyEvent, sc: &mut ServiceCenter) {
-
-    }
-    fn back(&self, sc: &mut ServiceCenter) -> RcPSt {
-        PageMainMenu::new()
-    }
-    fn move_to(&self, sc: &mut ServiceCenter) -> Option<RcPSt> {
-        Option::None
-    }
+    Exit
 }
 
 
-struct PageMainMenu {
-    move_to_ret: Option<Rc<PageState>>,
-    options_fn: Vec<fn() -> RcPSt>,
-    options: Vec<String>,
-    cur: usize
-}
-
-
-impl PageState for PageMainMenu {
-    fn new(&self) -> RcPSt {
-        let a: Vec<RcPSt> = {
-            ExitPage::new
-        };
-        let b: Vec<String> = {
-            "выход (exit)"
-        };
-        PageMainMenu {
-            move_to_ret: None,
-            options_fn: a,
-            options: b,
-            cur: 0
-        }
-    }
-}
-
-impl PageMenuState for PageMainMenu {
-    fn items_list(&self) -> Vec<String> {
-        self.options
-    }
-    fn items_cnt(&self) -> usize {
-        self.options.len();
-    }
-    fn cur_item(&self) -> usize {
-        self.cur
-    }
-    fn set_cur_item(&self, new_cur: usize) {
-        self.cur = new_cur;
-    }
-    fn move_to_item(&self, sc: &mut ServiceCenter) {
-        self.move_to_ret = self.options_fn[self.cur](sc);
-    }
-    fn title(&self) -> String {
-        "Главное меню"
-    }
-    fn move_to(&self, sc: &mut ServiceCenter) -> Option<Rc<PageState>> {
-        self.move_to_ret
-    }
-    fn back(&self, sc: &mut ServiceCenter) -> Self {
-        PageMainMenu::new();
-    }
-}
-
-
-#[derive(Debug, Default)]
+// #[derive(Debug, Default)]
 struct App {
     sc: ServiceCenter,
-    page: dyn PageState
+    page: Page
 }
 
 impl App {
     fn new() -> Self {
         let sc = ServiceCenter::new();
-        let page = PageMainMenu::new();
+        let page = ListPage::new();
         Self { sc, page }
     }
 
-    pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
-        while self.page != ExitPage {
+    fn build_page(page: PageOption) -> Page {
+        match page {
+            MainMenu => Page::List({
+                {},
+                0,
+                "главное меню",
+                PageOption::MainMenu
+            }),
+            AddNewTransport => todo!()
+        }
+    }
+
+    fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
+        loop {
             terminal.draw(|frame| self.draw(frame))?;
             self.handle_events()?;
             let r = self.page.move_to(&mut self.sc);
-            self.page = r.unwrap_or_default(self.page);
+            match r {
+                Action::Back => self.page = build_page(self.page.back()),
+                Action::None => {},
+                Action ::Quit => return Ok(()),
+                Action::Go(p) => self.page = build_page(p)
+            }
         }
         Ok(())
     }
