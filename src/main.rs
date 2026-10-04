@@ -4,22 +4,22 @@ use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use ratatui::{
     style::{Color, Style},
     widgets::{Block, Borders, List, ListState, Paragraph},
+    layout::{Constraint, Direction, Layout},
     DefaultTerminal, Frame,
 };
 
-use strum::Display;
 
-use tui_textarea::TextArea;
+use ratatui_textarea::TextArea;
 
 mod service_center;
-use service_center::ServiceCenter;
+use service_center::{ServiceCenter, PageOption, Action, ItemTypes};
 
 fn main() -> io::Result<()> {
     ratatui::run(|terminal| App::new().run(terminal))
 }
 
 trait IPage {
-    fn draw(&self, frame: &mut Frame, sc: &mut ServiceCenter);
+    fn draw(&mut self, frame: &mut Frame, sc: &mut ServiceCenter);
     fn handle_key_event(&mut self, key_event: KeyEvent, sc: &mut ServiceCenter);
     fn back(&self) -> PageOption;
     fn move_to(&mut self, sc: &mut ServiceCenter) -> Action;
@@ -46,7 +46,7 @@ impl ListPage {
 }
 
 impl IPage for ListPage {
-    fn draw(&self, frame: &mut Frame, _sc: &mut ServiceCenter) {
+    fn draw(&mut self, frame: &mut Frame, _sc: &mut ServiceCenter) {
         let items: Vec<String> = self.options.iter().map(|(label, _)| label.clone()).collect();
 
         let list = List::new(items)
@@ -86,21 +86,79 @@ impl IPage for ListPage {
     }
 }
 
+type AreaVec = Vec<(String, TextArea<'static>)>;
+
 struct FormPage {
     title: String,
-    backpage: PageOption
-    // areas: Vec<TextArea>,
-    // build_areas_fn: fn (&FormPage) -> ()
+    backpage: PageOption,
+    areas: AreaVec,
+    build_areas_fn: fn (&mut AreaVec) -> (),
+    focus: usize,
+    done_fn: fn (&AreaVec, &mut ServiceCenter) -> (),
+    moving: Action
+}
+
+impl FormPage {
+    fn new(title: String, backpage: PageOption, build_areas_fn: fn (&mut AreaVec) -> (),
+        done_fn: fn (&AreaVec, &mut ServiceCenter) -> ()) -> Self {
+        let mut ret = FormPage {
+            title, backpage, areas: vec![], build_areas_fn, focus: 0, done_fn, moving: Action::None
+        };
+        build_areas_fn(&mut ret.areas);
+        ret
+    }
 }
 
 impl IPage for FormPage {
-    fn draw(&self, _frame: &mut Frame, _sc: &mut ServiceCenter) {}
-    fn handle_key_event(&mut self, _key_event: KeyEvent, _sc: &mut ServiceCenter) {}
+    fn draw(&mut self, frame: &mut Frame, _sc: &mut ServiceCenter) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .margin(2)
+            .constraints([
+                vec![Constraint::Length(3); self.areas.len()],
+                vec![Constraint::Min(1)],
+            ].concat())
+            .split(frame.area());
+
+        let focus = self.focus;
+        let get_style = |ind| {
+            if focus == ind {
+                Style::default().fg(Color::Green).bold()
+            } else {
+                Style::default().fg(Color::DarkGray)
+            }
+        };
+
+        for (ind, (title, area)) in self.areas.iter_mut().enumerate() {
+            area.set_block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(title.clone())
+                    .border_style(get_style(ind)),
+            );
+            frame.render_widget(&*area, chunks[ind]);
+        }
+    }
+    fn handle_key_event(&mut self, key_event: KeyEvent, sc: &mut ServiceCenter) {
+        if key_event.kind == KeyEventKind::Press {
+            match key_event.code {
+                KeyCode::Tab | KeyCode::Enter => {
+                    if self.focus + 1 == self.areas.len() {
+                        (self.done_fn)(&self.areas, sc);
+                        self.moving = Action::Back
+                    } else {
+                        self.focus += 1
+                    }
+                },
+                _ => { },
+            }
+        }
+    }
     fn back(&self) -> PageOption {
         self.backpage
     }
     fn move_to(&mut self, _sc: &mut ServiceCenter) -> Action {
-        Action::None
+        self.moving
     }
 }
 
@@ -110,7 +168,7 @@ struct TextPage {
 }
 
 impl IPage for TextPage {
-    fn draw(&self, frame: &mut Frame, _sc: &mut ServiceCenter) {
+    fn draw(&mut self, frame: &mut Frame, _sc: &mut ServiceCenter) {
         let paragraph = Paragraph::new(self.text.clone())
             .block(Block::default().title("Текст").borders(Borders::ALL));
         frame.render_widget(paragraph, frame.area());
@@ -131,7 +189,7 @@ enum Page {
 }
 
 impl IPage for Page {
-    fn draw(&self, frame: &mut Frame, sc: &mut ServiceCenter) {
+    fn draw(&mut self, frame: &mut Frame, sc: &mut ServiceCenter) {
         match self {
             Page::List(p) => p.draw(frame, sc),
             Page::Form(p) => p.draw(frame, sc),
@@ -159,33 +217,6 @@ impl IPage for Page {
             Page::Text(p) => p.move_to(sc),
         }
     }
-}
-
-#[derive(Debug, Clone, Copy)]
-enum Action {
-    None,
-    Back,
-    Quit,
-    Go(PageOption),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Display, Default)]
-enum PageOption {
-    #[strum(to_string = "главное меню")]
-    #[default]
-    MainMenu,
-    #[strum(to_string = "добавить новый транспорт")]
-    AddNewTransport,
-    #[strum(to_string = "провести техосмотр")]
-    TechReview,
-    #[strum(to_string = "статистика потребления энергии")]
-    EnergyStatistic,
-    #[strum(to_string = "список устройств для новичков")]
-    NubList,
-    #[strum(to_string = "инвентарь")]
-    Inventory,
-    #[strum(to_string = "о нас")]
-    AboutUs,
 }
 
 struct App {
