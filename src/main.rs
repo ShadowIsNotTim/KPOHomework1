@@ -42,6 +42,8 @@ pub enum PageOption {
     AddNewItemForm,
 }
 
+const ABOUT_US_TEXT: &str = include_str!("about_us.txt");
+
 #[derive(Debug, Clone, Copy)]
 enum Action {
     None,
@@ -83,6 +85,20 @@ impl ListPage {
 
 impl IPage for ListPage {
     fn draw(&mut self, frame: &mut Frame, _sc: &mut ServiceCenter) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .margin(2)
+            .constraints(vec![
+                Constraint::Length(0),
+                Constraint::Fill(1),
+                Constraint::Length(1)
+            ])
+            .split(frame.area());
+
+        let title_text = Paragraph::new(self.title.to_string())
+                .style(Style::default().bg(Color::Indexed(236)));
+        frame.render_widget(title_text, chunks[0]);
+        
         let items: Vec<String> = self.options.iter().map(|(label, _)| label.clone()).collect();
 
         let list = List::new(items)
@@ -92,7 +108,11 @@ impl IPage for ListPage {
 
         let mut state = ListState::default();
         state.select(Some(self.cur));
-        frame.render_stateful_widget(list, frame.area(), &mut state);
+        frame.render_stateful_widget(list, chunks[1], &mut state);
+
+        let subtext = Paragraph::new("Esc - назад; up/down; Enter/Right - ок".to_string())
+                .style(Style::default().bg(Color::Indexed(236)));
+        frame.render_widget(subtext, chunks[2]);
     }
 
     fn handle_key_event(&mut self, key_event: KeyEvent, _sc: &mut ServiceCenter) {
@@ -130,7 +150,6 @@ struct FormPage {
     title: String,
     backpage: PageOption,
     areas: AreaVec,
-    build_areas_fn: BuildAreasFnT,
     focus: usize,
     done_fn: DoneFnT,
     moving: Action
@@ -140,7 +159,7 @@ impl FormPage {
     fn new(title: String, backpage: PageOption, build_areas_fn: BuildAreasFnT,
         done_fn: DoneFnT) -> Self {
         let mut ret = FormPage {
-            title, backpage, areas: vec![], build_areas_fn, focus: 0, done_fn, moving: Action::None
+            title, backpage, areas: vec![], focus: 0, done_fn, moving: Action::None
         };
         build_areas_fn(&mut ret.areas);
         ret
@@ -153,10 +172,15 @@ impl IPage for FormPage {
             .direction(Direction::Vertical)
             .margin(2)
             .constraints([
+                vec![Constraint::Length(1)],
                 vec![Constraint::Length(3); self.areas.len()],
-                vec![Constraint::Min(1)],
+                vec![Constraint::Length(1)],
             ].concat())
             .split(frame.area());
+
+        let title_text = Paragraph::new(self.title.to_string())
+                .style(Style::default().bg(Color::Indexed(236)));
+        frame.render_widget(title_text, chunks[0]);
 
         let focus = self.focus;
         let get_style = |ind| {
@@ -174,8 +198,12 @@ impl IPage for FormPage {
                     .title(title.clone())
                     .border_style(get_style(ind)),
             );
-            frame.render_widget(&*area, chunks[ind]);
+            frame.render_widget(&*area, chunks[ind+1]);
         }
+
+        let subtext = Paragraph::new("Esc - отмена; Enter/Tab - далее".to_string())
+                .style(Style::default().bg(Color::Indexed(236)));
+        frame.render_widget(subtext, chunks[self.areas.len()+1]);
     }
     fn handle_key_event(&mut self, key_event: KeyEvent, sc: &mut ServiceCenter) {
         if key_event.kind == KeyEventKind::Press {
@@ -211,9 +239,22 @@ struct TextPage {
 
 impl IPage for TextPage {
     fn draw(&mut self, frame: &mut Frame, _sc: &mut ServiceCenter) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .margin(2)
+            .constraints(vec![
+                Constraint::Fill(1),
+                Constraint::Length(1)
+            ])
+            .split(frame.area());
+
         let paragraph = Paragraph::new(self.text.clone())
             .block(Block::default().title("Текст").borders(Borders::ALL));
-        frame.render_widget(paragraph, frame.area());
+        frame.render_widget(paragraph, chunks[0]);
+
+        let subtext = Paragraph::new("Esc - назад".to_string())
+                .style(Style::default().bg(Color::Indexed(236)));
+        frame.render_widget(subtext, chunks[1]);
     }
     fn handle_key_event(&mut self, _key_event: KeyEvent, _sc: &mut ServiceCenter) {}
     fn back(&self) -> PageOption {
@@ -312,7 +353,7 @@ impl App {
                 Self::main_menu_options(),
             )),
             PageOption::AboutUs => Page::Text(TextPage {
-                text: "О нас".to_string(),
+                text: ABOUT_US_TEXT.to_string(),
                 backpage: PageOption::MainMenu,
             }),
             PageOption::TechReview => Page::List(ListPage::new(
@@ -335,7 +376,15 @@ impl App {
             PageOption::AddNewTransportForm(vt) => Self::vehicle_form(vt),
             PageOption::AddNewItem => todo!(),
             PageOption::AddNewItemForm => todo!(),
-            PageOption::EnergyStatistic => todo!(),
+            PageOption::EnergyStatistic => {
+                Page::List(ListPage::new(
+                    "Затраты энергии",
+                    PageOption::MainMenu,
+                    sc.energy_statistic().iter()
+                    .map(|s| (s.clone(), Action::None))
+                    .collect()
+                ))
+            },
             PageOption::NubList => todo!(),
         }
     }
