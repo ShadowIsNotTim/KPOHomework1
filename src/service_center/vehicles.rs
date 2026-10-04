@@ -28,7 +28,7 @@ pub trait Vehicle {
         0
     }
     fn for_beginners(&self) -> bool {
-        false
+        self.simplicity() >= 6
     }
     fn get_model(&self) -> String;
     fn to_string(&self) -> String {
@@ -57,12 +57,21 @@ pub struct ElectricBike {
     has_passenger_seat: bool
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Bicycle {
+    id: u32,
+    model: String,
+    wheel_diameter: Mm
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Display, EnumIter)]
 pub enum VehicleTypes {
     #[strum(to_string = "электрический скутер")]
     ElectricScooter,
     #[strum(to_string = "электрический велик")]
-    ElectricBike
+    ElectricBike,
+    #[strum(to_string = "простой велосипед")]
+    Bicycle
 }
 
 impl VehicleTypes {
@@ -73,6 +82,9 @@ impl VehicleTypes {
             ),
             VehicleTypes::ElectricBike => (
                 "Новый байк".to_string(), ElectricBike::build_areas, ElectricBike::done
+            ),
+            VehicleTypes::Bicycle => (
+                "Новый велосипед".to_string(), Bicycle::build_areas, Bicycle::done
             )
         }
     }
@@ -102,6 +114,14 @@ impl Vehicle for ElectricScooter {
 
     fn get_model(&self) -> String {
         self.model.clone()
+    }
+
+    fn to_string(&self) -> String {
+        format!(
+            "Самокат {} #{}: {}/{} kWh, колесо {} мм, простота {}",
+            self.model, self.id, self.energy.0, self.capacity.0,
+            self.wheel_diameter.0, self.simplicity()
+        )
     }
 
     fn build_areas(areas: &mut AreaVec) {
@@ -145,6 +165,14 @@ impl Vehicle for ElectricBike {
         self.model.clone()
     }
 
+    fn to_string(&self) -> String {
+        format!(
+            "Байк {} #{}: {}/{} kWh, колесо {} мм, пассажир: {}, простота {}",
+            self.model, self.id, self.energy.0, self.capacity.0, self.wheel_diameter.0,
+            if self.has_passenger_seat { "да" } else { "нет" }, self.simplicity()
+        )
+    }
+
     fn build_areas(areas: &mut AreaVec) {
         areas.push(("Модель".to_string(), TextArea::default()));
         areas.push(("Заряд (kWh)".to_string(), TextArea::default()));
@@ -166,6 +194,54 @@ impl Vehicle for ElectricBike {
                 seat.trim().to_lowercase().as_str(),
                 "y" | "yes" | "1" | "true" | "да"
             ),
+        }));
+    }
+}
+
+#[typetag::serde]
+impl Vehicle for Bicycle {
+    fn get_id(&self) -> u32 {
+        self.id
+    }
+
+    fn name(&self) -> String {
+        format!("{} id-{}", self.model, self.id)
+    }
+
+    fn get_energy(&self) -> KWh {
+        KWh(0.0)
+    }
+
+    fn get_capacity(&self) -> KWh {
+        KWh(0.0)
+    }
+
+    fn simplicity(&self) -> u8 {
+        7
+    }
+
+    fn get_model(&self) -> String {
+        self.model.clone()
+    }
+
+    fn to_string(&self) -> String {
+        format!(
+            "Велосипед {} #{}: колесо {} мм, простота {}",
+            self.model, self.id, self.wheel_diameter.0, self.simplicity()
+        )
+    }
+
+    fn build_areas(areas: &mut AreaVec) {
+        areas.push(("Модель".to_string(), TextArea::default()));
+        areas.push(("Диаметр колеса (мм)".to_string(), TextArea::default()));
+    }
+
+    fn done(areas: &AreaVec, sc: &mut ServiceCenter) {
+        let id = sc.next_transport_id();
+        sc.add_transport(Rc::new(Bicycle {
+            id,
+            model: areas[0].1.lines().join(""),
+            wheel_diameter: Mm(parse_wh(areas, 1)),
         }));
     }
 }

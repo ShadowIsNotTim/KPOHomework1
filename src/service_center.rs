@@ -73,10 +73,10 @@ impl ServiceCenter {
             .collect()
     }
 
-    pub fn numlist(&self) -> Vec<String> {
+    pub fn nublist(&self) -> Vec<String> {
         self.techs.iter()
             .filter(|t| t.for_beginners())
-            .map(|t| t.to_string())
+            .map(|t| format!("`{}` с простотой: {}", t.name(), t.simplicity()))
             .collect()
     }
 

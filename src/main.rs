@@ -409,7 +409,16 @@ impl App {
                     .collect()
                 ))
             },
-            PageOption::NubList => todo!(),
+            PageOption::NubList => {
+                Page::List(ListPage::new(
+                    "Список техники для новичков 🥴",
+                    // раст работает на UTF-8 поэтому поддерживает смайлики нативно 🥳🦄
+                    PageOption::MainMenu,
+                    sc.nublist().iter()
+                        .map(|f| (f.clone(), Action::None))
+                        .collect()
+                ))
+            },
             PageOption::SaveToFile => {
                 Page::List(ListPage::new(
                     "Сохраненине в файл. Вы уверены?",
