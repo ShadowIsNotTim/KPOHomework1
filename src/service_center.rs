@@ -44,7 +44,7 @@ impl ServiceCenter {
 
     pub fn save(&mut self) -> Result<(), io::Error> {
         let filename = "date.json";
-        let json = serde_json::to_string_pretty(&(self.techs, self.items)).unwrap();
+        let json = serde_json::to_string_pretty(&(&self.techs, &self.items)).unwrap();
         fs::write(filename, json)?;
 
         return Ok(());

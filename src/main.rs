@@ -2,14 +2,14 @@ use std::io;
 
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use ratatui::{
-    DefaultTerminal, Frame, layout::{Constraint, Direction, Layout}, style::{Color, Style}, text::Text, widgets::{Block, Borders, List, ListState, Paragraph},
+    DefaultTerminal, Frame, layout::{Constraint, Direction, Layout}, style::{Color, Style}, widgets::{Block, Borders, List, ListState, Paragraph},
 };
 
 
 use ratatui_textarea::TextArea;
 
 mod service_center;
-use service_center::{ServiceCenter, VehicleTypes};
+use service_center::{ServiceCenter, VehicleTypes, ItemTypes};
 
 use strum::Display;
 use strum::IntoEnumIterator;
@@ -36,7 +36,7 @@ pub enum PageOption {
     #[strum(to_string = "добавление транспорта")]
     AddNewTransportForm(VehicleTypes),
     #[strum(to_string = "добавление предмета")]
-    AddNewItemForm,
+    AddNewItemForm(ItemTypes),
     #[strum(to_string = "сохранить")]
     SaveToFile,
     #[strum(to_string = "загрузить")]
@@ -115,7 +115,7 @@ impl IPage for ListPage {
         state.select(Some(self.cur));
         frame.render_stateful_widget(list, chunks[1], &mut state);
 
-        let subtext = Paragraph::new("Esc - назад; up/down; Enter/Right - ок".to_string())
+        let subtext = Paragraph::new("Esc/Left - назад; up/down; Enter/Right - ок".to_string())
                 .style(Style::default().bg(Color::Indexed(236)));
         frame.render_widget(subtext, chunks[2]);
     }
@@ -206,7 +206,7 @@ impl IPage for FormPage {
             frame.render_widget(&*area, chunks[ind+1]);
         }
 
-        let subtext = Paragraph::new("Esc - отмена; Enter/Tab - далее".to_string())
+        let subtext = Paragraph::new("Esc/Left - отмена; Enter/Tab - далее".to_string())
                 .style(Style::default().bg(Color::Indexed(236)));
         frame.render_widget(subtext, chunks[self.areas.len()+1]);
     }
@@ -257,7 +257,7 @@ impl IPage for TextPage {
             .block(Block::default().title("Текст").borders(Borders::ALL));
         frame.render_widget(paragraph, chunks[0]);
 
-        let subtext = Paragraph::new("Esc - назад".to_string())
+        let subtext = Paragraph::new("Esc/Left - назад".to_string())
                 .style(Style::default().bg(Color::Indexed(236)));
         frame.render_widget(subtext, chunks[1]);
     }
@@ -314,7 +314,8 @@ struct App {
 
 impl App {
     fn new() -> Self {
-        let sc = ServiceCenter::new();
+        let mut sc = ServiceCenter::new();
+        sc.load();
         let page = Self::build_page(PageOption::MainMenu, &sc);
         Self { sc, page }
     }
@@ -352,6 +353,16 @@ impl App {
         ))
     }
 
+    fn item_form(it: ItemTypes) -> Page {
+        let (title, build_areas_fn, done_fn) = it.unpack();
+        Page::Form(FormPage::new(
+            title,
+            PageOption::AddNewItem,
+            build_areas_fn,
+            done_fn,
+        ))
+    }
+
     fn build_page(page: PageOption, sc: &ServiceCenter) -> Page {
         match page {
             PageOption::MainMenu => Page::List(ListPage::new(
@@ -381,8 +392,14 @@ impl App {
                         .collect()
             )),
             PageOption::AddNewTransportForm(vt) => Self::vehicle_form(vt),
-            PageOption::AddNewItem => todo!(),
-            PageOption::AddNewItemForm => todo!(),
+            PageOption::AddNewItem => Page::List(ListPage::new(
+                "Создание предмета (выберете что создать)",
+                PageOption::MainMenu,
+                ItemTypes::iter()
+                        .map(|t| (t.to_string(), Action::Go(PageOption::AddNewItemForm(t))))
+                        .collect()
+            )),
+            PageOption::AddNewItemForm(it) => Self::item_form(it),
             PageOption::EnergyStatistic => {
                 Page::List(ListPage::new(
                     "Затраты энергии",
@@ -397,14 +414,14 @@ impl App {
                 Page::List(ListPage::new(
                     "Сохраненине в файл. Вы уверены?",
                     PageOption::MainMenu,
-                    vec![("Подтвердить".to_string(), Action::Save), ("Отменить".to_string(), Action::None)]
+                    vec![("Подтвердить".to_string(), Action::Save), ("Отменить".to_string(), Action::Back)]
                 ))
             },
             PageOption::LoadFromFile => {
                 Page::List(ListPage::new(
                     "Загрузка из файла. Вы уверены?",
                     PageOption::MainMenu,
-                    vec![("Подтвердить".to_string(), Action::Load), ("Отменить".to_string(), Action::None)]
+                    vec![("Подтвердить".to_string(), Action::Load), ("Отменить".to_string(), Action::Back)]
                 ))
             },
             PageOption::ErrorPage => {
@@ -423,7 +440,7 @@ impl App {
             match self.page.move_to(&mut self.sc) {
                 Action::Back => self.page = Self::build_page(self.page.back(), &self.sc),
                 Action::None => {}
-                Action::Quit => return Ok(()),
+                Action::Quit => { break; },
                 Action::Go(p) => self.page = Self::build_page(p, &self.sc),
                 Action::Load => match self.sc.load() {
                     Err(e) => {
@@ -447,6 +464,8 @@ impl App {
                 }
             }
         }
+        self.sc.save();
+        return Ok(());
     }
 
     fn draw(&mut self, frame: &mut Frame) {
@@ -456,7 +475,7 @@ impl App {
     fn handle_events(&mut self) -> io::Result<()> {
         if let Event::Key(key_event) = event::read()? {
             if key_event.kind == KeyEventKind::Press {
-                if key_event.code == KeyCode::Esc {
+                if key_event.code == KeyCode::Esc || key_event.code == KeyCode::Left {
                     let back = self.page.back();
                     self.page = Self::build_page(back, &self.sc);
                 } else {

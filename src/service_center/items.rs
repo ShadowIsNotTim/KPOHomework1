@@ -3,10 +3,14 @@ use ratatui_textarea::TextArea;
 use serde::{Serialize, Deserialize};
 
 use super::{AreaVec, ServiceCenter, Wh};
+use super::super::{BuildAreasFnT, DoneFnT};
+use strum::{Display, EnumIter};
 
 
+#[typetag::serde]
 pub trait Item {
     fn get_id(&self) -> u32;
+    fn name(&self) -> String;
     fn to_string(&self) -> String {
         format!("Item (id={})", self.get_id())
     }
@@ -21,6 +25,7 @@ pub struct ChargingStation {
     charge_speed: Wh
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 enum ClothingSize {
     S,
     M,
@@ -39,20 +44,53 @@ impl ClothingSize {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Helmet {
     id: u32,
     size: ClothingSize,
     is_damaged: bool
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Display, EnumIter)]
 pub enum ItemTypes {
-    ChargingStation(ChargingStation),
-    Helmet(Helmet)
+    #[strum(to_string = "зарядная станция")]
+    ChargingStation,
+    #[strum(to_string = "шлем")]
+    Helmet
 }
 
+impl ItemTypes {
+    pub fn unpack(self) -> (String, BuildAreasFnT, DoneFnT) {
+        match self {
+            ItemTypes::ChargingStation => (
+                "Новая зарядная станция".to_string(),
+                ChargingStation::build_areas,
+                ChargingStation::done
+            ),
+            ItemTypes::Helmet => (
+                "Новый шлем".to_string(),
+                Helmet::build_areas,
+                Helmet::done
+            )
+        }
+    }
+}
+
+#[typetag::serde]
 impl Item for ChargingStation {
     fn get_id(&self) -> u32 {
         self.id
+    }
+
+    fn name(&self) -> String {
+        format!("Зарядная станция #{}", self.id)
+    }
+
+    fn to_string(&self) -> String {
+        format!(
+            "Зарядная станция #{}: портов {}, скорость зарядки {} Wh",
+            self.id, self.port_count, self.charge_speed.0
+        )
     }
 
     fn build_areas(areas: &mut AreaVec) {
@@ -72,9 +110,23 @@ impl Item for ChargingStation {
     }
 }
 
+#[typetag::serde]
 impl Item for Helmet {
     fn get_id(&self) -> u32 {
         self.id
+    }
+
+    fn name(&self) -> String {
+        format!("Шлем #{}", self.id)
+    }
+
+    fn to_string(&self) -> String {
+        format!(
+            "Шлем #{}: размер {:?}, повреждён: {}",
+            self.id,
+            self.size,
+            if self.is_damaged { "да" } else { "нет" }
+        )
     }
 
     fn build_areas(areas: &mut AreaVec) {

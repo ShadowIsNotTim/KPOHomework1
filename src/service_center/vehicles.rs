@@ -9,7 +9,7 @@ use strum::{Display, EnumIter};
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Mm(pub f32);
 
-#[typetag::serialize]
+#[typetag::serde]
 pub trait Vehicle {
     // интерфейс для транспортных средств
     fn get_id(&self) -> u32;
@@ -82,7 +82,7 @@ fn parse_wh(areas: &AreaVec, ind: usize) -> f32 {
     areas[ind].1.lines().join("").trim().parse().unwrap_or(0.0)
 }
 
-#[typetag::serialize]
+#[typetag::serde]
 impl Vehicle for ElectricScooter {
     fn get_id(&self) -> u32 {
         self.id
@@ -123,7 +123,7 @@ impl Vehicle for ElectricScooter {
     }
 }
 
-#[typetag::serialize]
+#[typetag::serde]
 impl Vehicle for ElectricBike {
     fn get_id(&self) -> u32 {
         self.id
