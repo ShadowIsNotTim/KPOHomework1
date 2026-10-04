@@ -1,44 +1,17 @@
 use std::rc::Rc;
 use ratatui_textarea::TextArea;
-use strum::Display;
 
 
-mod items;
-use items::*;
+pub mod items;
+pub use items::*;
 
-mod vehicles;
-use vehicles::*;
+pub mod vehicles;
+pub use vehicles::*;
 
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Display, Default)]
-pub enum PageOption {
-    #[strum(to_string = "главное меню")]
-    #[default]
-    MainMenu,
-    #[strum(to_string = "добавить новый транспорт")]
-    AddNewTransport,
-    #[strum(to_string = "провести техосмотр")]
-    TechReview,
-    #[strum(to_string = "статистика потребления энергии")]
-    EnergyStatistic,
-    #[strum(to_string = "список устройств для новичков")]
-    NubList,
-    #[strum(to_string = "инвентарь")]
-    Inventory,
-    #[strum(to_string = "о нас")]
-    AboutUs,
-}
-
-
-#[derive(Debug, Clone, Copy)]
-pub enum Action {
-    None,
-    Back,
-    Quit,
-    Go(PageOption),
-}
-
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct KWh(pub f32);
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Wh(pub f32);
 
 
@@ -49,11 +22,6 @@ type RIt = Rc<dyn Item>;
 type AreaVec = Vec<(String, TextArea<'static>)>;
 
 
-
-pub enum ItemTypes {
-    ChargingStation(ChargingStation),
-    Helmet(Helmet)
-}
 
 pub struct ServiceCenter {
     techs: Vec<RVeh>,
@@ -77,6 +45,10 @@ impl ServiceCenter {
         self.items.len() as u32
     }
 
+    pub fn next_transport_id(&self) -> u32 {
+        self.techs.len() as u32
+    }
+
     pub fn energy_statistic(&self) -> Vec<String> {
         self.techs.iter()
             .map(|t| format!(
@@ -88,6 +60,18 @@ impl ServiceCenter {
         self.techs.iter()
             .filter(|t| t.for_beginners())
             .map(|t| t.to_string())
+            .collect()
+    }
+
+    pub fn transport_list(&self) -> Vec<String> {
+        self.techs.iter()
+            .map(|t| t.to_string())
+            .collect()
+    }
+
+    pub fn item_list(&self) -> Vec<String> {
+        self.items.iter()
+            .map(|i| i.to_string())
             .collect()
     }
 

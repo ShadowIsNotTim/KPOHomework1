@@ -43,6 +43,11 @@ pub struct Helmet {
     is_damaged: bool
 }
 
+pub enum ItemTypes {
+    ChargingStation(ChargingStation),
+    Helmet(Helmet)
+}
+
 impl Item for ChargingStation {
     fn get_id(&self) -> u32 {
         self.id

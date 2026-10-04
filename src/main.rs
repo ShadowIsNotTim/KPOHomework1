@@ -12,7 +12,43 @@ use ratatui::{
 use ratatui_textarea::TextArea;
 
 mod service_center;
-use service_center::{ServiceCenter, PageOption, Action, ItemTypes};
+use service_center::{ServiceCenter, VehicleTypes};
+
+use strum::Display;
+use strum::IntoEnumIterator;
+
+#[derive(Debug, Clone, Copy, PartialEq, Display, Default)]
+pub enum PageOption {
+    #[strum(to_string = "главное меню")]
+    #[default]
+    MainMenu,
+    #[strum(to_string = "добавить новый транспорт")]
+    AddNewTransport,
+    #[strum(to_string = "добавить новый предмет")]
+    AddNewItem,
+    #[strum(to_string = "провести техосмотр")]
+    TechReview,
+    #[strum(to_string = "статистика потребления энергии")]
+    EnergyStatistic,
+    #[strum(to_string = "список устройств для новичков")]
+    NubList,
+    #[strum(to_string = "инвентарь")]
+    Inventory,
+    #[strum(to_string = "о нас")]
+    AboutUs,
+    #[strum(to_string = "добавление транспорта")]
+    AddNewTransportForm(VehicleTypes),
+    #[strum(to_string = "добавление предмета")]
+    AddNewItemForm,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum Action {
+    None,
+    Back,
+    Quit,
+    Go(PageOption),
+}
 
 fn main() -> io::Result<()> {
     ratatui::run(|terminal| App::new().run(terminal))
@@ -87,20 +123,22 @@ impl IPage for ListPage {
 }
 
 type AreaVec = Vec<(String, TextArea<'static>)>;
+pub type BuildAreasFnT = fn (&mut AreaVec) -> ();
+pub type DoneFnT = fn (&AreaVec, &mut ServiceCenter) -> ();
 
 struct FormPage {
     title: String,
     backpage: PageOption,
     areas: AreaVec,
-    build_areas_fn: fn (&mut AreaVec) -> (),
+    build_areas_fn: BuildAreasFnT,
     focus: usize,
-    done_fn: fn (&AreaVec, &mut ServiceCenter) -> (),
+    done_fn: DoneFnT,
     moving: Action
 }
 
 impl FormPage {
-    fn new(title: String, backpage: PageOption, build_areas_fn: fn (&mut AreaVec) -> (),
-        done_fn: fn (&AreaVec, &mut ServiceCenter) -> ()) -> Self {
+    fn new(title: String, backpage: PageOption, build_areas_fn: BuildAreasFnT,
+        done_fn: DoneFnT) -> Self {
         let mut ret = FormPage {
             title, backpage, areas: vec![], build_areas_fn, focus: 0, done_fn, moving: Action::None
         };
@@ -150,7 +188,11 @@ impl IPage for FormPage {
                         self.focus += 1
                     }
                 },
-                _ => { },
+                _ => {
+                    if let Some((_, area)) = self.areas.get_mut(self.focus) {
+                        area.input(key_event);
+                    }
+                },
             }
         }
     }
@@ -227,7 +269,7 @@ struct App {
 impl App {
     fn new() -> Self {
         let sc = ServiceCenter::new();
-        let page = Self::build_page(PageOption::MainMenu);
+        let page = Self::build_page(PageOption::MainMenu, &sc);
         Self { sc, page }
     }
 
@@ -238,6 +280,7 @@ impl App {
     fn main_menu_options() -> Vec<(String, Action)> {
         vec![
             Self::menu_item(PageOption::AddNewTransport),
+            Self::menu_item(PageOption::AddNewItem),
             Self::menu_item(PageOption::TechReview),
             Self::menu_item(PageOption::EnergyStatistic),
             Self::menu_item(PageOption::NubList),
@@ -247,7 +290,21 @@ impl App {
         ]
     }
 
-    fn build_page(page: PageOption) -> Page {
+    fn list_options(items: Vec<String>) -> Vec<(String, Action)> {
+        items.into_iter().map(|s| (s, Action::None)).collect()
+    }
+
+    fn vehicle_form(vt: VehicleTypes) -> Page {
+        let (title, build_areas_fn, done_fn) = vt.unpack();
+        Page::Form(FormPage::new(
+            title,
+            PageOption::AddNewTransport,
+            build_areas_fn,
+            done_fn,
+        ))
+    }
+
+    fn build_page(page: PageOption, sc: &ServiceCenter) -> Page {
         match page {
             PageOption::MainMenu => Page::List(ListPage::new(
                 "Главное меню",
@@ -258,11 +315,28 @@ impl App {
                 text: "О нас".to_string(),
                 backpage: PageOption::MainMenu,
             }),
-            PageOption::AddNewTransport => todo!(),
-            PageOption::TechReview => todo!(),
+            PageOption::TechReview => Page::List(ListPage::new(
+                "Техосмотр",
+                PageOption::MainMenu,
+                Self::list_options(sc.transport_list()),
+            )),
+            PageOption::Inventory => Page::List(ListPage::new(
+                "Инвентарь",
+                PageOption::MainMenu,
+                Self::list_options(sc.item_list()),
+            )),
+            PageOption::AddNewTransport => Page::List(ListPage::new(
+                "Создание транспорта (выберете что создать)",
+                PageOption::MainMenu,
+                VehicleTypes::iter()
+                        .map(|t| (t.to_string(), Action::Go(PageOption::AddNewTransportForm(t))))
+                        .collect()
+            )),
+            PageOption::AddNewTransportForm(vt) => Self::vehicle_form(vt),
+            PageOption::AddNewItem => todo!(),
+            PageOption::AddNewItemForm => todo!(),
             PageOption::EnergyStatistic => todo!(),
             PageOption::NubList => todo!(),
-            PageOption::Inventory => todo!(),
         }
     }
 
@@ -271,10 +345,10 @@ impl App {
             terminal.draw(|frame| self.draw(frame))?;
             self.handle_events()?;
             match self.page.move_to(&mut self.sc) {
-                Action::Back => self.page = Self::build_page(self.page.back()),
+                Action::Back => self.page = Self::build_page(self.page.back(), &self.sc),
                 Action::None => {}
                 Action::Quit => return Ok(()),
-                Action::Go(p) => self.page = Self::build_page(p),
+                Action::Go(p) => self.page = Self::build_page(p, &self.sc),
             }
         }
     }
@@ -288,7 +362,7 @@ impl App {
             if key_event.kind == KeyEventKind::Press {
                 if key_event.code == KeyCode::Esc {
                     let back = self.page.back();
-                    self.page = Self::build_page(back);
+                    self.page = Self::build_page(back, &self.sc);
                 } else {
                     self.page.handle_key_event(key_event, &mut self.sc);
                 }
