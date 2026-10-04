@@ -1,3 +1,4 @@
+use std::rc::Rc;
 
 pub struct KWh(pub f32);
 pub struct Wh(pub f32);
@@ -9,49 +10,38 @@ pub struct Code3Num(pub u8);
 
 pub trait Vehicle {
     // интерфейс для транспортных средств
-    pub fn get_id() -> u32 {
-        return id;
-    }
-
-    pub fn get_energy() -> KWh {
-        return energy;
-    }
-    pub fn get_capacity() -> KWh {
-        return capacity;
-    }
-    pub fn get_consumption() -> KWh;
+    fn get_id(&self) -> u32;
+    fn get_energy(&self) -> KWh;
+    fn get_capacity(&self) -> KWh;
+    fn get_consumption(&self) -> KWh;
 
     // Киловатт-часы (KWh) (K большая тк codestyle)
     // увы в тз киловатты именно
     // по этому пришлось флоаты узать
 
-    pub fn simplicity() -> u8;
-    pub fn for_beginners() -> bool {
-        return simplicity >= 6;
-    }
-    pub fn get_model() -> &str {
-        return model;
-    }
-    pub fn name() -> &str {
-        return format!("{} id-{}", get_model(), get_id());
+    fn simplicity(&self) -> u8;
+    fn for_beginners(&self) -> bool;
+    fn get_model(&self) -> String;
+    fn name(&self) -> String {
+        return format!("{} id-{}", self.get_model(), self.get_id());
     }
 }
 
 
 struct ElectricScooter {
     id: u32,
-    model: &str,
+    model: String,
     energy: KWh,
-    capacity: Kwh,
+    capacity: KWh,
     wheel_diameter: Mm
 }
 
 
 struct ElectricBike {
     id: u32,
-    model: &str,
+    model: String,
     energy: KWh,
-    capacity: Kwh,
+    capacity: KWh,
     wheel_diameter: Mm,
     has_passenger_seat: bool
 }
@@ -61,7 +51,7 @@ struct ElectricBike {
 
 struct ChargingStation {
     id: u32,
-    location_code: &str,
+    location_code: String,
     port_count: u8,
     occupied_ports: u8,
     charge_speed: Wh
@@ -93,5 +83,5 @@ struct SmartLock {
 // Service Center
 
 pub struct ServiceCenter {
-    techs: vec<Vehicle>
+    techs: Vec<Rc<dyn Vehicle>>
 }
