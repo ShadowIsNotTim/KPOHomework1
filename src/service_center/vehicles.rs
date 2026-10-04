@@ -1,14 +1,15 @@
 use std::rc::Rc;
 use ratatui_textarea::TextArea;
+use serde::{Serialize, Deserialize};
 
 use super::{AreaVec, ServiceCenter, KWh};
 use super::super::{BuildAreasFnT, DoneFnT};
 use strum::{Display, EnumIter};
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Mm(pub f32);
 
-
+#[typetag::serialize]
 pub trait Vehicle {
     // интерфейс для транспортных средств
     fn get_id(&self) -> u32;
@@ -37,7 +38,7 @@ pub trait Vehicle {
     fn done(areas: &AreaVec, sc: &mut ServiceCenter) where Self: Sized;
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ElectricScooter {
     id: u32,
     model: String,
@@ -46,7 +47,7 @@ pub struct ElectricScooter {
     wheel_diameter: Mm
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ElectricBike {
     id: u32,
     model: String,
@@ -81,6 +82,7 @@ fn parse_wh(areas: &AreaVec, ind: usize) -> f32 {
     areas[ind].1.lines().join("").trim().parse().unwrap_or(0.0)
 }
 
+#[typetag::serialize]
 impl Vehicle for ElectricScooter {
     fn get_id(&self) -> u32 {
         self.id
@@ -121,6 +123,7 @@ impl Vehicle for ElectricScooter {
     }
 }
 
+#[typetag::serialize]
 impl Vehicle for ElectricBike {
     fn get_id(&self) -> u32 {
         self.id

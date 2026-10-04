@@ -1,5 +1,7 @@
-use std::rc::Rc;
+use std::{io, rc::Rc};
 use ratatui_textarea::TextArea;
+use serde::{Serialize, Deserialize};
+use std::fs;
 
 
 pub mod items;
@@ -8,10 +10,10 @@ pub use items::*;
 pub mod vehicles;
 pub use vehicles::*;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct KWh(pub f32);
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Wh(pub f32);
 
 
@@ -20,7 +22,6 @@ pub struct Wh(pub f32);
 type RVeh = Rc<dyn Vehicle>;
 type RIt = Rc<dyn Item>;
 type AreaVec = Vec<(String, TextArea<'static>)>;
-
 
 
 pub struct ServiceCenter {
@@ -39,6 +40,22 @@ impl ServiceCenter {
 
     pub fn add_item(&mut self, i: RIt) {
         self.items.push(i);
+    }
+
+    pub fn save(&mut self) -> Result<(), io::Error> {
+        let filename = "date.json";
+        let json = serde_json::to_string_pretty(&(self.techs, self.items)).unwrap();
+        fs::write(filename, json)?;
+
+        return Ok(());
+    }
+
+    pub fn load(&mut self) -> Result<(), io::Error> {
+        let filename = "date.json";
+        let content = fs::read_to_string(filename)?;
+        (self.techs, self.items) = serde_json::from_str(&content)?;
+
+        return Ok(());
     }
 
     pub fn next_item_id(&self) -> u32 {

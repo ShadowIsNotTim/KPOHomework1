@@ -2,10 +2,7 @@ use std::io;
 
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use ratatui::{
-    style::{Color, Style},
-    widgets::{Block, Borders, List, ListState, Paragraph},
-    layout::{Constraint, Direction, Layout},
-    DefaultTerminal, Frame,
+    DefaultTerminal, Frame, layout::{Constraint, Direction, Layout}, style::{Color, Style}, text::Text, widgets::{Block, Borders, List, ListState, Paragraph},
 };
 
 
@@ -40,6 +37,12 @@ pub enum PageOption {
     AddNewTransportForm(VehicleTypes),
     #[strum(to_string = "добавление предмета")]
     AddNewItemForm,
+    #[strum(to_string = "сохранить")]
+    SaveToFile,
+    #[strum(to_string = "загрузить")]
+    LoadFromFile,
+    #[strum(to_string = "Произошла ошибка!")]
+    ErrorPage
 }
 
 const ABOUT_US_TEXT: &str = include_str!("about_us.txt");
@@ -50,6 +53,8 @@ enum Action {
     Back,
     Quit,
     Go(PageOption),
+    Save,
+    Load
 }
 
 fn main() -> io::Result<()> {
@@ -304,7 +309,7 @@ impl IPage for Page {
 
 struct App {
     sc: ServiceCenter,
-    page: Page,
+    page: Page
 }
 
 impl App {
@@ -327,6 +332,8 @@ impl App {
             Self::menu_item(PageOption::NubList),
             Self::menu_item(PageOption::Inventory),
             Self::menu_item(PageOption::AboutUs),
+            Self::menu_item(PageOption::SaveToFile),
+            Self::menu_item(PageOption::LoadFromFile),
             ("выход (exit)".to_string(), Action::Quit),
         ]
     }
@@ -386,6 +393,26 @@ impl App {
                 ))
             },
             PageOption::NubList => todo!(),
+            PageOption::SaveToFile => {
+                Page::List(ListPage::new(
+                    "Сохраненине в файл. Вы уверены?",
+                    PageOption::MainMenu,
+                    vec![("Подтвердить".to_string(), Action::Save), ("Отменить".to_string(), Action::None)]
+                ))
+            },
+            PageOption::LoadFromFile => {
+                Page::List(ListPage::new(
+                    "Загрузка из файла. Вы уверены?",
+                    PageOption::MainMenu,
+                    vec![("Подтвердить".to_string(), Action::Load), ("Отменить".to_string(), Action::None)]
+                ))
+            },
+            PageOption::ErrorPage => {
+                Page::Text(TextPage {
+                    text: "ошибка: ошибок пока не видно".to_string(),
+                    backpage: PageOption::MainMenu
+                })
+            }
         }
     }
 
@@ -398,6 +425,26 @@ impl App {
                 Action::None => {}
                 Action::Quit => return Ok(()),
                 Action::Go(p) => self.page = Self::build_page(p, &self.sc),
+                Action::Load => match self.sc.load() {
+                    Err(e) => {
+                        let error = format!("Err: {}", e);
+                        self.page = Page::Text(TextPage {
+                            text: format!("Упс! Произошла ошибка: {}", error),
+                            backpage: PageOption::MainMenu
+                        });
+                    },
+                    Ok(()) => self.page = Self::build_page(PageOption::MainMenu, &self.sc)
+                },
+                Action::Save => match self.sc.save() {
+                    Err(e) => {
+                        let error = format!("Err: {}", e);
+                        self.page = Page::Text(TextPage {
+                            text: format!("Упс! Произошла ошибка: {}", error),
+                            backpage: PageOption::MainMenu
+                        });
+                    },
+                    Ok(()) => self.page = Self::build_page(PageOption::MainMenu, &self.sc)
+                }
             }
         }
     }

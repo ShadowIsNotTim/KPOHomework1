@@ -1,5 +1,6 @@
 use std::rc::Rc;
 use ratatui_textarea::TextArea;
+use serde::{Serialize, Deserialize};
 
 use super::{AreaVec, ServiceCenter, Wh};
 
@@ -13,6 +14,7 @@ pub trait Item {
     fn done(areas: &AreaVec, sc: &mut ServiceCenter) where Self: Sized; // добавляем предмет
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ChargingStation {
     id: u32,
     port_count: u8,
