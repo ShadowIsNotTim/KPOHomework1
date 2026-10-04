@@ -86,3 +86,12 @@ struct SmartLock {
     is_locked: bool,
     code: Code3Num
 }
+
+
+
+
+// Service Center
+
+pub struct ServiceCenter {
+    techs: vec<Vehicle>
+}
