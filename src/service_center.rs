@@ -85,3 +85,9 @@ struct SmartLock {
 pub struct ServiceCenter {
     techs: Vec<Rc<dyn Vehicle>>
 }
+
+impl ServiceCenter {
+    pub fn new() -> Self {
+        Self { techs: Vec::new() }
+    }
+}
