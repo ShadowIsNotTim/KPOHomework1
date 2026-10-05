@@ -41,6 +41,8 @@
   .iface { fill: #f3f8fd; stroke: #bcd4ea; stroke-width: 1.5; stroke-dasharray: 6 4; }
   .chip { fill: #fff; stroke: #d5dde6; stroke-width: 1; }
   .chip-ghost { fill-opacity: .35; stroke-opacity: .5; }
+  .chip-slot { fill: none; stroke: #b9c2cd; stroke-width: 1.2; stroke-dasharray: 5 4; }
+  .slot-text { font: 11px ui-monospace, Menlo, Consolas, monospace; fill: #9aa4b0; }
   .title { font: 600 15px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #1a1a1a; }
   .ititle { font: 600 13px ui-monospace, Menlo, Consolas, monospace; fill: var(--accent); }
   .isub { font: 10.5px -apple-system, "Segoe UI", Roboto, sans-serif; fill: #7d97b5; }
@@ -148,7 +150,7 @@
       <text class="sub" x="505" y="438" text-anchor="middle">techs · items</text>
 
       <!-- ================= Vehicle (интерфейс, включает технику) ================= -->
-      <rect class="iface" x="70" y="578" width="380" height="222" rx="12"/>
+      <rect class="iface" x="70" y="578" width="380" height="262" rx="12"/>
       <text class="ititle" x="90" y="604">Vehicle · интерфейс</text>
       <text class="isub ghost-text" x="430" y="604" text-anchor="end">VehicleTypes · enum-диспетчер</text>
       <text class="isub" x="90" y="620">включает технику</text>
@@ -161,9 +163,12 @@
       <rect class="chip" x="95" y="728" width="330" height="40" rx="7"/>
       <text class="chip-text" x="113" y="753">Bicycle</text>
       <text class="impl-tag" x="407" y="753" text-anchor="end">impl</text>
+      <rect class="chip chip-slot" x="95" y="776" width="330" height="52" rx="7"/>
+      <text class="chip-text ghost-text" x="113" y="798">+ новый тип</text>
+      <text class="slot-text" x="113" y="816">не затрагивает остальной проект</text>
 
       <!-- ================= Item (интерфейс, включает предметы) ================= -->
-      <rect class="iface" x="560" y="578" width="370" height="170" rx="12"/>
+      <rect class="iface" x="560" y="578" width="370" height="212" rx="12"/>
       <text class="ititle" x="580" y="604">Item · интерфейс</text>
       <text class="isub ghost-text" x="910" y="604" text-anchor="end">ItemTypes · enum-диспетчер</text>
       <text class="isub" x="580" y="620">включает предметы</text>
@@ -173,6 +178,9 @@
       <rect class="chip" x="585" y="680" width="320" height="40" rx="7"/>
       <text class="chip-text" x="603" y="705">Helmet</text>
       <text class="impl-tag" x="887" y="705" text-anchor="end">impl</text>
+      <rect class="chip chip-slot" x="585" y="728" width="320" height="52" rx="7"/>
+      <text class="chip-text ghost-text" x="603" y="750">+ новый предмет</text>
+      <text class="slot-text" x="603" y="768">не затрагивает остальной проект</text>
     </svg>
 
     <p class="ai-note">сгенерировано ИИ</p>
