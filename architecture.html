@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Компоненты — Сервисный центр</title>
+<style>
+  :root {
+    --bg: #f7f8fa;
+    --ink: #1a1a1a;
+    --muted: #8a8a8a;
+    --accent: #2b6cb0;
+    --border: #e6e9ee;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 48px 24px;
+    background: var(--bg);
+    color: var(--ink);
+    font: 14px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; }
+  .card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px 32px 24px;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, .04);
+  }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 6px; letter-spacing: -0.02em; }
+  header .meta { color: #aab2bd; font-size: 12px; }
+  header { margin-bottom: 8px; }
+  svg { width: 100%; height: auto; display: block; }
+
+  .box { fill: #fff; stroke: #c9d3df; stroke-width: 1.5; }
+  .box-ghost { fill-opacity: .4; stroke-opacity: .5; }
+  .ghost-text { opacity: .55; }
+  .box-core { fill: #f6f8fa; stroke: #9aa7b5; stroke-width: 1.5; }
+  .iface { fill: #f3f8fd; stroke: #bcd4ea; stroke-width: 1.5; stroke-dasharray: 6 4; }
+  .chip { fill: #fff; stroke: #d5dde6; stroke-width: 1; }
+  .chip-ghost { fill-opacity: .35; stroke-opacity: .5; }
+  .title { font: 600 15px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #1a1a1a; }
+  .ititle { font: 600 13px ui-monospace, Menlo, Consolas, monospace; fill: var(--accent); }
+  .isub { font: 10.5px -apple-system, "Segoe UI", Roboto, sans-serif; fill: #7d97b5; }
+  .chip-text { font: 12.5px ui-monospace, Menlo, Consolas, monospace; fill: #1a1a1a; }
+  .sub { font: 11px -apple-system, "Segoe UI", Roboto, sans-serif; fill: var(--muted); }
+  .edge-dual { stroke: var(--accent); stroke-width: 1.6; fill: none; }
+  .edge-single { stroke: #8a94a3; stroke-width: 1.6; fill: none; }
+  .edge-ghost { stroke: #b9c2cd; stroke-width: 1.4; fill: none; opacity: .6; }
+  .label { font: 11px -apple-system, "Segoe UI", Roboto, sans-serif; fill: #9aa4b0; }
+  .impl-tag { font: 600 9.5px ui-monospace, Menlo, Consolas, monospace; fill: #a7b4c4; }
+  .ai-note { margin: 18px 0 0; text-align: right; color: #b7bec7; font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <header>
+      <h1>Компоненты и связи</h1>
+      <div class="meta">Rust · TUI · KPOHomework1</div>
+    </header>
+
+    <svg viewBox="0 0 1000 860" role="img" aria-label="Компонентная схема">
+      <defs>
+        <marker id="arrow-accent" viewBox="0 0 10 10" refX="8" refY="5"
+                markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#2b6cb0"/>
+        </marker>
+        <marker id="arrow-gray" viewBox="0 0 10 10" refX="8" refY="5"
+                markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="#8a94a3"/>
+        </marker>
+      </defs>
+
+      <!-- ================= СВЯЗИ ================= -->
+      <!-- App -> Action -->
+      <path class="edge-single" d="M260,95 L300,95" marker-end="url(#arrow-gray)"/>
+      <text class="label" x="280" y="84" text-anchor="middle">исполняет</text>
+
+      <!-- IPage -> Action -->
+      <path class="edge-single" d="M540,95 L500,95" marker-end="url(#arrow-gray)"/>
+      <text class="label" x="520" y="84" text-anchor="middle">move_to()</text>
+
+      <!-- App -> IPage -->
+      <path class="edge-dual" d="M230,60 C230,14 600,14 600,60"
+            marker-end="url(#arrow-accent)"/>
+      <text class="label" x="415" y="16" text-anchor="middle">использует</text>
+
+      <!-- App -> PageOption (вложен в Action) -->
+      <path class="edge-ghost" d="M260,128 L316,152" marker-end="url(#arrow-gray)"/>
+
+      <!-- IPage -> PageOption -->
+      <path class="edge-ghost" d="M540,188 L484,174" marker-end="url(#arrow-gray)"/>
+
+      <!-- App <-> ServiceCenter -->
+      <path class="edge-dual" d="M160,142 C200,280 340,340 432,378"
+            marker-start="url(#arrow-accent)" marker-end="url(#arrow-accent)"/>
+      <text class="label" x="212" y="300">общается</text>
+
+      <!-- IPage <-> ServiceCenter -->
+      <path class="edge-dual" d="M750,282 C750,330 660,350 585,378"
+            marker-start="url(#arrow-accent)" marker-end="url(#arrow-accent)"/>
+      <text class="label" x="700" y="322">общается</text>
+
+      <!-- Vehicle -> ServiceCenter -->
+      <path class="edge-single" d="M250,578 C250,520 370,500 455,470"
+            marker-end="url(#arrow-gray)"/>
+      <text class="label" x="268" y="520">регистрирует</text>
+
+      <!-- Item -> ServiceCenter -->
+      <path class="edge-single" d="M760,578 C760,520 640,500 558,470"
+            marker-end="url(#arrow-gray)"/>
+      <text class="label" x="690" y="520">регистрирует</text>
+
+      <!-- ================= App ================= -->
+      <rect class="box" x="60" y="60" width="200" height="82" rx="10"/>
+      <text class="title" x="160" y="98" text-anchor="middle">App</text>
+      <text class="sub" x="160" y="120" text-anchor="middle">event loop · состояние</text>
+
+      <!-- ================= Action (команда), внутри вложен PageOption ================= -->
+      <rect class="box box-ghost" x="300" y="58" width="200" height="172" rx="12"/>
+      <text class="title ghost-text" x="400" y="84" text-anchor="middle">Action</text>
+      <text class="sub ghost-text" x="400" y="102" text-anchor="middle">паттерн «Команда»</text>
+      <rect class="chip chip-ghost" x="318" y="116" width="164" height="94" rx="8"/>
+      <text class="title ghost-text" x="400" y="150" text-anchor="middle">PageOption</text>
+      <text class="sub ghost-text" x="400" y="170" text-anchor="middle">enum · состояния</text>
+
+      <!-- ================= IPage (интерфейс, включает страницы) ================= -->
+      <rect class="iface" x="540" y="60" width="420" height="222" rx="12"/>
+      <text class="ititle" x="560" y="86">IPage · интерфейс</text>
+      <text class="isub ghost-text" x="940" y="86" text-anchor="end">Page · enum-диспетчер</text>
+      <text class="isub" x="560" y="102">включает страницы</text>
+      <rect class="chip" x="565" y="114" width="370" height="40" rx="7"/>
+      <text class="chip-text" x="583" y="139">ListPage</text>
+      <text class="impl-tag" x="917" y="139" text-anchor="end">impl</text>
+      <rect class="chip" x="565" y="162" width="370" height="40" rx="7"/>
+      <text class="chip-text" x="583" y="187">FormPage</text>
+      <text class="impl-tag" x="917" y="187" text-anchor="end">impl</text>
+      <rect class="chip" x="565" y="210" width="370" height="40" rx="7"/>
+      <text class="chip-text" x="583" y="235">TextPage</text>
+      <text class="impl-tag" x="917" y="235" text-anchor="end">impl</text>
+
+      <!-- ================= ServiceCenter ================= -->
+      <rect class="box-core" x="380" y="380" width="250" height="88" rx="10"/>
+      <text class="title" x="505" y="418" text-anchor="middle">ServiceCenter</text>
+      <text class="sub" x="505" y="438" text-anchor="middle">techs · items</text>
+
+      <!-- ================= Vehicle (интерфейс, включает технику) ================= -->
+      <rect class="iface" x="70" y="578" width="380" height="222" rx="12"/>
+      <text class="ititle" x="90" y="604">Vehicle · интерфейс</text>
+      <text class="isub ghost-text" x="430" y="604" text-anchor="end">VehicleTypes · enum-диспетчер</text>
+      <text class="isub" x="90" y="620">включает технику</text>
+      <rect class="chip" x="95" y="632" width="330" height="40" rx="7"/>
+      <text class="chip-text" x="113" y="657">ElectricScooter</text>
+      <text class="impl-tag" x="407" y="657" text-anchor="end">impl</text>
+      <rect class="chip" x="95" y="680" width="330" height="40" rx="7"/>
+      <text class="chip-text" x="113" y="705">ElectricBike</text>
+      <text class="impl-tag" x="407" y="705" text-anchor="end">impl</text>
+      <rect class="chip" x="95" y="728" width="330" height="40" rx="7"/>
+      <text class="chip-text" x="113" y="753">Bicycle</text>
+      <text class="impl-tag" x="407" y="753" text-anchor="end">impl</text>
+
+      <!-- ================= Item (интерфейс, включает предметы) ================= -->
+      <rect class="iface" x="560" y="578" width="370" height="170" rx="12"/>
+      <text class="ititle" x="580" y="604">Item · интерфейс</text>
+      <text class="isub ghost-text" x="910" y="604" text-anchor="end">ItemTypes · enum-диспетчер</text>
+      <text class="isub" x="580" y="620">включает предметы</text>
+      <rect class="chip" x="585" y="632" width="320" height="40" rx="7"/>
+      <text class="chip-text" x="603" y="657">ChargingStation</text>
+      <text class="impl-tag" x="887" y="657" text-anchor="end">impl</text>
+      <rect class="chip" x="585" y="680" width="320" height="40" rx="7"/>
+      <text class="chip-text" x="603" y="705">Helmet</text>
+      <text class="impl-tag" x="887" y="705" text-anchor="end">impl</text>
+    </svg>
+
+    <p class="ai-note">сгенерировано ИИ</p>
+  </div>
+</div>
+</body>
+</html>
