@@ -245,3 +245,17 @@ impl Vehicle for Bicycle {
         }));
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_bycycle() {
+        let mut areas = AreaVec::new();
+        Bicycle::build_areas(&mut areas);
+
+        assert_eq!(areas.len(), 2);
+        assert_eq!(areas[0].0, "Модель".to_string());
+    }
+}

@@ -23,8 +23,8 @@ pub enum PageOption {
     AddNewTransport,
     #[strum(to_string = "добавить новый предмет")]
     AddNewItem,
-    #[strum(to_string = "провести техосмотр")]
-    TechReview,
+    #[strum(to_string = "список")]
+    TechList,
     #[strum(to_string = "статистика потребления энергии")]
     EnergyStatistic,
     #[strum(to_string = "список устройств для новичков")]
@@ -323,8 +323,13 @@ struct App {
 impl App {
     fn new() -> Self {
         let mut sc = ServiceCenter::new();
-        sc.load();
-        let page = Self::build_page(PageOption::MainMenu, &sc);
+        let page = match sc.load() {
+            Ok(()) => Self::build_page(PageOption::MainMenu, &sc),
+            Err(e) => match e.kind() {
+                std::io::ErrorKind::NotFound => Self::build_page(PageOption::AboutUs, &sc),
+                _ => Page::Text(TextPage { text: format!("ошибка при загрузке date.json: {}", e), backpage: PageOption::MainMenu })
+            }
+        };
         Self { sc, page }
     }
 
@@ -336,7 +341,7 @@ impl App {
         vec![
             Self::menu_item(PageOption::AddNewTransport),
             Self::menu_item(PageOption::AddNewItem),
-            Self::menu_item(PageOption::TechReview),
+            Self::menu_item(PageOption::TechList),
             Self::menu_item(PageOption::EnergyStatistic),
             Self::menu_item(PageOption::NubList),
             Self::menu_item(PageOption::Inventory),
@@ -382,8 +387,8 @@ impl App {
                 text: ABOUT_US_TEXT.to_string(),
                 backpage: PageOption::MainMenu,
             }),
-            PageOption::TechReview => Page::List(ListPage::new(
-                "Техосмотр",
+            PageOption::TechList => Page::List(ListPage::new(
+                "Список техники",
                 PageOption::MainMenu,
                 Self::list_options(sc.transport_list()),
             )),
@@ -481,7 +486,7 @@ impl App {
                 }
             }
         }
-        self.sc.save();
+        self.sc.save().ok();
         return Ok(());
     }
 
@@ -503,3 +508,4 @@ impl App {
         Ok(())
     }
 }
+
