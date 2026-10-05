@@ -133,6 +133,9 @@ impl IPage for ListPage {
                 if let Some((_, action)) = self.options.get(self.cur) {
                     self.moving = *action;
                 }
+            },
+            KeyCode::Left => {
+                self.moving = Action::Back;
             }
             _ => {}
         }
@@ -206,19 +209,24 @@ impl IPage for FormPage {
             frame.render_widget(&*area, chunks[ind+1]);
         }
 
-        let subtext = Paragraph::new("Esc/Left - отмена; Enter/Tab - далее".to_string())
+        let subtext = Paragraph::new("Esc - отмена; Left - назад; Enter/Tab/Right - далее".to_string())
                 .style(Style::default().bg(Color::Indexed(236)));
         frame.render_widget(subtext, chunks[self.areas.len()+1]);
     }
     fn handle_key_event(&mut self, key_event: KeyEvent, sc: &mut ServiceCenter) {
         if key_event.kind == KeyEventKind::Press {
             match key_event.code {
-                KeyCode::Tab | KeyCode::Enter => {
+                KeyCode::Tab | KeyCode::Enter | KeyCode::Right => {
                     if self.focus + 1 == self.areas.len() {
                         (self.done_fn)(&self.areas, sc);
                         self.moving = Action::Back
                     } else {
                         self.focus += 1
+                    }
+                },
+                KeyCode::Left => {
+                    if self.focus != 0 {
+                        self.focus -= 1
                     }
                 },
                 _ => {
@@ -257,7 +265,7 @@ impl IPage for TextPage {
             .block(Block::default().title("Текст").borders(Borders::ALL));
         frame.render_widget(paragraph, chunks[0]);
 
-        let subtext = Paragraph::new("Esc/Left - назад".to_string())
+        let subtext = Paragraph::new("Esc - назад".to_string())
                 .style(Style::default().bg(Color::Indexed(236)));
         frame.render_widget(subtext, chunks[1]);
     }
@@ -484,7 +492,7 @@ impl App {
     fn handle_events(&mut self) -> io::Result<()> {
         if let Event::Key(key_event) = event::read()? {
             if key_event.kind == KeyEventKind::Press {
-                if key_event.code == KeyCode::Esc || key_event.code == KeyCode::Left {
+                if key_event.code == KeyCode::Esc {
                     let back = self.page.back();
                     self.page = Self::build_page(back, &self.sc);
                 } else {
