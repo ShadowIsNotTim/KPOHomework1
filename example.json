@@ -1,0 +1,46 @@
+[
+  [
+    {
+      "ElectricScooter": {
+        "id": 0,
+        "model": "Xiaomi Mi Pro 2",
+        "energy": 0.6,
+        "capacity": 1.2,
+        "wheel_diameter": 8.5
+      }
+    },
+    {
+      "ElectricBike": {
+        "id": 1,
+        "model": "Super73 S2",
+        "energy": 0.9,
+        "capacity": 1.8,
+        "wheel_diameter": 20.0,
+        "has_passenger_seat": true
+      }
+    },
+    {
+      "Bicycle": {
+        "id": 2,
+        "model": "Stels Navigator",
+        "wheel_diameter": 26.0
+      }
+    }
+  ],
+  [
+    {
+      "ChargingStation": {
+        "id": 0,
+        "port_count": 2,
+        "charge_speed": 22.0
+      }
+    },
+    {
+      "Helmet": {
+        "id": 1,
+        "size": "M",
+        "is_damaged": false
+      }
+    }
+  ]
+]

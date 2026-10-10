@@ -2,7 +2,7 @@ use std::rc::Rc;
 use ratatui_textarea::TextArea;
 use serde::{Serialize, Deserialize};
 
-use super::{AreaVec, ServiceCenter, KWh};
+use super::{AreaVec, ServiceCenter, KWh, FormatError, required_text, parse_f32, parse_bool};
 use super::super::{BuildAreasFnT, DoneFnT};
 use strum::{Display, EnumIter};
 
@@ -35,7 +35,7 @@ pub trait Vehicle {
         return format!("{} id-{}", self.get_model(), self.get_id());
     }
     fn build_areas(areas: &mut AreaVec) where Self: Sized;
-    fn done(areas: &AreaVec, sc: &mut ServiceCenter) where Self: Sized;
+    fn done(areas: &AreaVec, sc: &mut ServiceCenter) -> Result<(), FormatError> where Self: Sized;
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -90,10 +90,6 @@ impl VehicleTypes {
     }
 }
 
-fn parse_wh(areas: &AreaVec, ind: usize) -> f32 {
-    areas[ind].1.lines().join("").trim().parse().unwrap_or(0.0)
-}
-
 #[typetag::serde]
 impl Vehicle for ElectricScooter {
     fn get_id(&self) -> u32 {
@@ -131,15 +127,16 @@ impl Vehicle for ElectricScooter {
         areas.push(("Диаметр колеса (мм)".to_string(), TextArea::default()));
     }
 
-    fn done(areas: &AreaVec, sc: &mut ServiceCenter) {
+    fn done(areas: &AreaVec, sc: &mut ServiceCenter) -> Result<(), FormatError> {
         let id = sc.next_transport_id();
         sc.add_transport(Rc::new(ElectricScooter {
             id,
-            model: areas[0].1.lines().join(""),
-            energy: KWh(parse_wh(areas, 1)),
-            capacity: KWh(parse_wh(areas, 2)),
-            wheel_diameter: Mm(parse_wh(areas, 3)),
+            model: required_text(areas, 0)?,
+            energy: KWh(parse_f32(areas, 1)?),
+            capacity: KWh(parse_f32(areas, 2)?),
+            wheel_diameter: Mm(parse_f32(areas, 3)?),
         }));
+        Ok(())
     }
 }
 
@@ -181,20 +178,17 @@ impl Vehicle for ElectricBike {
         areas.push(("Пассажирское место? (y/n)".to_string(), TextArea::default()));
     }
 
-    fn done(areas: &AreaVec, sc: &mut ServiceCenter) {
+    fn done(areas: &AreaVec, sc: &mut ServiceCenter) -> Result<(), FormatError> {
         let id = sc.next_transport_id();
-        let seat = areas[4].1.lines().join("");
         sc.add_transport(Rc::new(ElectricBike {
             id,
-            model: areas[0].1.lines().join(""),
-            energy: KWh(parse_wh(areas, 1)),
-            capacity: KWh(parse_wh(areas, 2)),
-            wheel_diameter: Mm(parse_wh(areas, 3)),
-            has_passenger_seat: matches!(
-                seat.trim().to_lowercase().as_str(),
-                "y" | "yes" | "1" | "true" | "да"
-            ),
+            model: required_text(areas, 0)?,
+            energy: KWh(parse_f32(areas, 1)?),
+            capacity: KWh(parse_f32(areas, 2)?),
+            wheel_diameter: Mm(parse_f32(areas, 3)?),
+            has_passenger_seat: parse_bool(areas, 4)?,
         }));
+        Ok(())
     }
 }
 
@@ -236,13 +230,14 @@ impl Vehicle for Bicycle {
         areas.push(("Диаметр колеса (мм)".to_string(), TextArea::default()));
     }
 
-    fn done(areas: &AreaVec, sc: &mut ServiceCenter) {
+    fn done(areas: &AreaVec, sc: &mut ServiceCenter) -> Result<(), FormatError> {
         let id = sc.next_transport_id();
         sc.add_transport(Rc::new(Bicycle {
             id,
-            model: areas[0].1.lines().join(""),
-            wheel_diameter: Mm(parse_wh(areas, 1)),
+            model: required_text(areas, 0)?,
+            wheel_diameter: Mm(parse_f32(areas, 1)?),
         }));
+        Ok(())
     }
 }
 

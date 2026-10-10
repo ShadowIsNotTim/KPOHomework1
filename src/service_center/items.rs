@@ -2,7 +2,7 @@ use std::rc::Rc;
 use ratatui_textarea::TextArea;
 use serde::{Serialize, Deserialize};
 
-use super::{AreaVec, ServiceCenter, Wh};
+use super::{AreaVec, ServiceCenter, Wh, FormatError, required_text, parse_u8, parse_f32, parse_bool};
 use super::super::{BuildAreasFnT, DoneFnT};
 use strum::{Display, EnumIter};
 
@@ -15,7 +15,7 @@ pub trait Item {
         format!("Item (id={})", self.get_id())
     }
     fn build_areas(areas: &mut AreaVec) where Self: Sized;
-    fn done(areas: &AreaVec, sc: &mut ServiceCenter) where Self: Sized; // добавляем предмет
+    fn done(areas: &AreaVec, sc: &mut ServiceCenter) -> Result<(), FormatError> where Self: Sized; // добавляем предмет
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -34,12 +34,15 @@ enum ClothingSize {
 }
 
 impl ClothingSize {
-    fn parse(s: &str) -> Self {
+    fn parse(s: &str) -> Result<Self, FormatError> {
         match s.trim().to_uppercase().as_str() {
-            "M" => ClothingSize::M,
-            "L" => ClothingSize::L,
-            "XL" => ClothingSize::XL,
-            _ => ClothingSize::S,
+            "S" => Ok(ClothingSize::S),
+            "M" => Ok(ClothingSize::M),
+            "L" => Ok(ClothingSize::L),
+            "XL" => Ok(ClothingSize::XL),
+            _ => Err(FormatError::new(format!(
+                "размер «{}»: ожидалось S/M/L/XL", s.trim()
+            ))),
         }
     }
 }
@@ -98,15 +101,16 @@ impl Item for ChargingStation {
         areas.push(("Скорость зарядки (Wh)".to_string(), TextArea::default()));
     }
 
-    fn done(areas: &AreaVec, sc: &mut ServiceCenter) {
-        let port_count = areas[0].1.lines().join("").trim().parse().unwrap_or(0);
-        let charge_speed = areas[1].1.lines().join("").trim().parse().unwrap_or(0.0);
+    fn done(areas: &AreaVec, sc: &mut ServiceCenter) -> Result<(), FormatError> {
+        let port_count = parse_u8(areas, 0)?;
+        let charge_speed = parse_f32(areas, 1)?;
         let id = sc.next_item_id();
         sc.add_item(Rc::new(ChargingStation {
             id,
             port_count,
             charge_speed: Wh(charge_speed),
         }));
+        Ok(())
     }
 }
 
@@ -134,15 +138,12 @@ impl Item for Helmet {
         areas.push(("Повреждён? (y/n)".to_string(), TextArea::default()));
     }
 
-    fn done(areas: &AreaVec, sc: &mut ServiceCenter) {
-        let size = ClothingSize::parse(&areas[0].1.lines().join(""));
-        let text = areas[1].1.lines().join("");
-        let is_damaged = matches!(
-            text.trim().to_lowercase().as_str(),
-            "y" | "yes" | "1" | "true" | "да"
-        );
+    fn done(areas: &AreaVec, sc: &mut ServiceCenter) -> Result<(), FormatError> {
+        let size = ClothingSize::parse(&required_text(areas, 0)?)?;
+        let is_damaged = parse_bool(areas, 1)?;
         let id = sc.next_item_id();
         sc.add_item(Rc::new(Helmet { id, size, is_damaged }));
+        Ok(())
     }
 }
 

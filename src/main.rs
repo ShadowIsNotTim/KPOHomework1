@@ -9,7 +9,7 @@ use ratatui::{
 use ratatui_textarea::TextArea;
 
 mod service_center;
-use service_center::{ServiceCenter, VehicleTypes, ItemTypes};
+use service_center::{ServiceCenter, VehicleTypes, ItemTypes, FormatError};
 
 use strum::Display;
 use strum::IntoEnumIterator;
@@ -23,38 +23,59 @@ pub enum PageOption {
     AddNewTransport,
     #[strum(to_string = "добавить новый предмет")]
     AddNewItem,
-    #[strum(to_string = "список")]
-    TechList,
+    #[strum(to_string = "список техники")]
+    TransportList,
     #[strum(to_string = "статистика потребления энергии")]
-    EnergyStatistic,
+    EnergyStatistics,
     #[strum(to_string = "список устройств для новичков")]
-    NubList,
+    BeginnersList,
     #[strum(to_string = "инвентарь")]
     Inventory,
     #[strum(to_string = "о нас")]
     AboutUs,
     #[strum(to_string = "добавление транспорта")]
-    AddNewTransportForm(VehicleTypes),
+    VehicleForm(VehicleTypes),
     #[strum(to_string = "добавление предмета")]
-    AddNewItemForm(ItemTypes),
-    #[strum(to_string = "сохранить")]
-    SaveToFile,
-    #[strum(to_string = "загрузить")]
-    LoadFromFile,
+    ItemForm(ItemTypes),
+    #[strum(to_string = "операции с данными")]
+    DataOperations,
+    #[strum(to_string = "выход (exit)")]
+    Exit,
     #[strum(to_string = "Произошла ошибка!")]
-    ErrorPage
+    Error
 }
 
 const ABOUT_US_TEXT: &str = include_str!("about_us.txt");
 
 #[derive(Debug, Clone, Copy)]
-enum Action {
+pub enum Action {
     None,
     Back,
-    Quit,
     Go(PageOption),
     Save,
-    Load
+    Load,
+    LoadExample
+}
+
+#[derive(Debug)]
+enum ExitError {
+    Exit,
+    Io(io::Error),
+}
+
+impl From<io::Error> for ExitError {
+    fn from(error: io::Error) -> Self {
+        ExitError::Io(error)
+    }
+}
+
+impl std::fmt::Display for ExitError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ExitError::Exit => write!(f, "выход из приложения"),
+            ExitError::Io(error) => write!(f, "{}", error),
+        }
+    }
 }
 
 fn main() -> io::Result<()> {
@@ -66,36 +87,81 @@ trait IPage {
     fn handle_key_event(&mut self, key_event: KeyEvent, sc: &mut ServiceCenter);
     fn back(&self) -> PageOption;
     fn move_to(&mut self, sc: &mut ServiceCenter) -> Action;
+    fn is_main_menu(&self) -> bool {
+        false
+    }
 }
 
+type OptionsFnT = fn(&ServiceCenter, usize) -> Option<(String, Action)>;
+
 struct ListPage {
-    options: Vec<(String, Action)>,
+    get_option: OptionsFnT,
     cur: usize,
     title: String,
     backpage: PageOption,
     moving: Action,
+    subtext2: String,
+    custom_keys: Vec<(char, fn(&mut ServiceCenter, usize) -> ())>,
+    main_menu: bool,
 }
 
 impl ListPage {
-    fn new(title: impl Into<String>, backpage: PageOption, options: Vec<(String, Action)>) -> Self {
+    fn new(title: impl Into<String>, backpage: PageOption, get_option: OptionsFnT) -> Self {
         Self {
-            options,
+            get_option,
             cur: 0,
             title: title.into(),
             backpage,
             moving: Action::None,
+            subtext2: String::new(),
+            custom_keys: Vec::new(),
+            main_menu: false,
         }
+    }
+
+    fn set_key_code_event(mut self, key: char, description: String,
+        action: fn(&mut ServiceCenter, usize) -> ()) -> Self {
+        if !self.subtext2.is_empty() {
+            self.subtext2.push_str("; ");
+        }
+        self.subtext2.push_str(&format!("{} - {}", key, description));
+        self.custom_keys.push((key, action));
+        self
+    }
+
+    fn as_main_menu(mut self) -> Self {
+        self.main_menu = true;
+        self
+    }
+
+    fn options_len(&self, sc: &ServiceCenter) -> usize {
+        let get_option = self.get_option;
+        let mut len = 0;
+        while get_option(sc, len).is_some() {
+            len += 1;
+        }
+        len
     }
 }
 
 impl IPage for ListPage {
-    fn draw(&mut self, frame: &mut Frame, _sc: &mut ServiceCenter) {
+    fn is_main_menu(&self) -> bool {
+        self.main_menu
+    }
+
+    fn draw(&mut self, frame: &mut Frame, sc: &mut ServiceCenter) {
+        let len = self.options_len(sc);
+        if self.cur >= len {
+            self.cur = len.saturating_sub(1);
+        }
+
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .margin(2)
             .constraints(vec![
                 Constraint::Length(0),
                 Constraint::Fill(1),
+                Constraint::Length(1),
                 Constraint::Length(1)
             ])
             .split(frame.area());
@@ -104,7 +170,10 @@ impl IPage for ListPage {
                 .style(Style::default().bg(Color::Indexed(236)));
         frame.render_widget(title_text, chunks[0]);
         
-        let items: Vec<String> = self.options.iter().map(|(label, _)| label.clone()).collect();
+        let get_option = self.get_option;
+        let items: Vec<String> = (0..len)
+            .filter_map(|ind| get_option(sc, ind).map(|(label, _)| label))
+            .collect();
 
         let list = List::new(items)
             .block(Block::default().title(self.title.as_str()).borders(Borders::ALL))
@@ -115,27 +184,39 @@ impl IPage for ListPage {
         state.select(Some(self.cur));
         frame.render_stateful_widget(list, chunks[1], &mut state);
 
+        let custom_text = Paragraph::new(self.subtext2.clone())
+                .style(Style::default().bg(Color::Indexed(236)));
+        frame.render_widget(custom_text, chunks[2]);
+
         let subtext = Paragraph::new("Esc/Left - назад; up/down; Enter/Right - ок".to_string())
                 .style(Style::default().bg(Color::Indexed(236)));
-        frame.render_widget(subtext, chunks[2]);
+        frame.render_widget(subtext, chunks[3]);
     }
 
-    fn handle_key_event(&mut self, key_event: KeyEvent, _sc: &mut ServiceCenter) {
+    fn handle_key_event(&mut self, key_event: KeyEvent, sc: &mut ServiceCenter) {
         if key_event.kind != KeyEventKind::Press {
             return;
         }
 
-        let last = self.options.len().saturating_sub(1);
+        let last = self.options_len(sc).saturating_sub(1);
         match key_event.code {
             KeyCode::Up => self.cur = self.cur.saturating_sub(1),
             KeyCode::Down => self.cur = (self.cur + 1).min(last),
             KeyCode::Enter | KeyCode::Char(' ') | KeyCode::Right => {
-                if let Some((_, action)) = self.options.get(self.cur) {
-                    self.moving = *action;
+                if let Some((_, action)) = (self.get_option)(sc, self.cur) {
+                    self.moving = action;
                 }
             },
             KeyCode::Left => {
                 self.moving = Action::Back;
+            }
+            KeyCode::Char(c) => {
+                let action = self.custom_keys.iter()
+                    .find(|(key, _)| *key == c)
+                    .map(|(_, action)| *action);
+                if let Some(action) = action {
+                    action(sc, self.cur);
+                }
             }
             _ => {}
         }
@@ -152,7 +233,7 @@ impl IPage for ListPage {
 
 type AreaVec = Vec<(String, TextArea<'static>)>;
 pub type BuildAreasFnT = fn (&mut AreaVec) -> ();
-pub type DoneFnT = fn (&AreaVec, &mut ServiceCenter) -> ();
+pub type DoneFnT = fn (&AreaVec, &mut ServiceCenter) -> Result<(), FormatError>;
 
 struct FormPage {
     title: String,
@@ -160,6 +241,7 @@ struct FormPage {
     areas: AreaVec,
     focus: usize,
     done_fn: DoneFnT,
+    format_error: Result<(), FormatError>,
     moving: Action
 }
 
@@ -167,7 +249,8 @@ impl FormPage {
     fn new(title: String, backpage: PageOption, build_areas_fn: BuildAreasFnT,
         done_fn: DoneFnT) -> Self {
         let mut ret = FormPage {
-            title, backpage, areas: vec![], focus: 0, done_fn, moving: Action::None
+            title, backpage, areas: vec![], focus: 0, done_fn,
+            format_error: Ok(()), moving: Action::None
         };
         build_areas_fn(&mut ret.areas);
         ret
@@ -182,6 +265,7 @@ impl IPage for FormPage {
             .constraints([
                 vec![Constraint::Length(1)],
                 vec![Constraint::Length(3); self.areas.len()],
+                vec![Constraint::Length(1)],
                 vec![Constraint::Length(1)],
             ].concat())
             .split(frame.area());
@@ -209,17 +293,27 @@ impl IPage for FormPage {
             frame.render_widget(&*area, chunks[ind+1]);
         }
 
+        let error_text = match &self.format_error {
+            Ok(()) => String::new(),
+            Err(error) => format!("Ошибка: {}", error),
+        };
+        let error_line = Paragraph::new(error_text)
+                .style(Style::default().fg(Color::Red));
+        frame.render_widget(error_line, chunks[self.areas.len()+1]);
+
         let subtext = Paragraph::new("Esc - отмена; Left - назад; Enter/Tab/Right - далее".to_string())
                 .style(Style::default().bg(Color::Indexed(236)));
-        frame.render_widget(subtext, chunks[self.areas.len()+1]);
+        frame.render_widget(subtext, chunks[self.areas.len()+2]);
     }
     fn handle_key_event(&mut self, key_event: KeyEvent, sc: &mut ServiceCenter) {
         if key_event.kind == KeyEventKind::Press {
             match key_event.code {
                 KeyCode::Tab | KeyCode::Enter | KeyCode::Right => {
                     if self.focus + 1 == self.areas.len() {
-                        (self.done_fn)(&self.areas, sc);
-                        self.moving = Action::Back
+                        self.format_error = (self.done_fn)(&self.areas, sc);
+                        if self.format_error.is_ok() {
+                            self.moving = Action::Back
+                        }
                     } else {
                         self.focus += 1
                     }
@@ -313,24 +407,34 @@ impl IPage for Page {
             Page::Text(p) => p.move_to(sc),
         }
     }
+    fn is_main_menu(&self) -> bool {
+        match self {
+            Page::List(p) => p.is_main_menu(),
+            Page::Form(p) => p.is_main_menu(),
+            Page::Text(p) => p.is_main_menu(),
+        }
+    }
 }
 
 struct App {
     sc: ServiceCenter,
-    page: Page
+    page: Page,
+    main_menu: Option<Page>
 }
 
 impl App {
     fn new() -> Self {
         let mut sc = ServiceCenter::new();
         let page = match sc.load() {
-            Ok(()) => Self::build_page(PageOption::MainMenu, &sc),
+            Ok(()) => Self::build_page(PageOption::MainMenu, &sc)
+                .unwrap_or_else(|e| Self::error_page(e)),
             Err(e) => match e.kind() {
-                std::io::ErrorKind::NotFound => Self::build_page(PageOption::AboutUs, &sc),
+                std::io::ErrorKind::NotFound => Self::build_page(PageOption::AboutUs, &sc)
+                    .unwrap_or_else(|e| Self::error_page(e)),
                 _ => Page::Text(TextPage { text: format!("ошибка при загрузке date.json: {}", e), backpage: PageOption::MainMenu })
             }
         };
-        Self { sc, page }
+        Self { sc, page, main_menu: None }
     }
 
     fn menu_item(page: PageOption) -> (String, Action) {
@@ -341,19 +445,14 @@ impl App {
         vec![
             Self::menu_item(PageOption::AddNewTransport),
             Self::menu_item(PageOption::AddNewItem),
-            Self::menu_item(PageOption::TechList),
-            Self::menu_item(PageOption::EnergyStatistic),
-            Self::menu_item(PageOption::NubList),
+            Self::menu_item(PageOption::TransportList),
+            Self::menu_item(PageOption::EnergyStatistics),
+            Self::menu_item(PageOption::BeginnersList),
             Self::menu_item(PageOption::Inventory),
             Self::menu_item(PageOption::AboutUs),
-            Self::menu_item(PageOption::SaveToFile),
-            Self::menu_item(PageOption::LoadFromFile),
-            ("выход (exit)".to_string(), Action::Quit),
+            Self::menu_item(PageOption::DataOperations),
+            Self::menu_item(PageOption::Exit),
         ]
-    }
-
-    fn list_options(items: Vec<String>) -> Vec<(String, Action)> {
-        items.into_iter().map(|s| (s, Action::None)).collect()
     }
 
     fn vehicle_form(vt: VehicleTypes) -> Page {
@@ -376,114 +475,131 @@ impl App {
         ))
     }
 
-    fn build_page(page: PageOption, sc: &ServiceCenter) -> Page {
+    fn build_page(page: PageOption, _sc: &ServiceCenter) -> Result<Page, ExitError> {
         match page {
-            PageOption::MainMenu => Page::List(ListPage::new(
+            PageOption::MainMenu => Ok(Page::List(ListPage::new(
                 "Главное меню",
-                PageOption::MainMenu,
-                Self::main_menu_options(),
-            )),
-            PageOption::AboutUs => Page::Text(TextPage {
+                PageOption::Exit,
+                main_menu_option,
+            ).as_main_menu())),
+            PageOption::AboutUs => Ok(Page::Text(TextPage {
                 text: ABOUT_US_TEXT.to_string(),
                 backpage: PageOption::MainMenu,
-            }),
-            PageOption::TechList => Page::List(ListPage::new(
-                "Список техники",
-                PageOption::MainMenu,
-                Self::list_options(sc.transport_list()),
+            })),
+            PageOption::TransportList => Ok(Page::List(
+                ListPage::new(
+                    "Список техники",
+                    PageOption::MainMenu,
+                    ServiceCenter::transport_options,
+                ).set_key_code_event('d', "удалить".to_string(),
+                    |sc, ind| sc.delete_transport(ind))
             )),
-            PageOption::Inventory => Page::List(ListPage::new(
-                "Инвентарь",
-                PageOption::MainMenu,
-                Self::list_options(sc.item_list()),
+            PageOption::Inventory => Ok(Page::List(
+                ListPage::new(
+                    "Инвентарь",
+                    PageOption::MainMenu,
+                    ServiceCenter::item_options,
+                ).set_key_code_event('d', "удалить".to_string(),
+                    |sc, ind| sc.delete_item(ind))
             )),
-            PageOption::AddNewTransport => Page::List(ListPage::new(
+            PageOption::AddNewTransport => Ok(Page::List(ListPage::new(
                 "Создание транспорта (выберете что создать)",
                 PageOption::MainMenu,
-                VehicleTypes::iter()
-                        .map(|t| (t.to_string(), Action::Go(PageOption::AddNewTransportForm(t))))
-                        .collect()
-            )),
-            PageOption::AddNewTransportForm(vt) => Self::vehicle_form(vt),
-            PageOption::AddNewItem => Page::List(ListPage::new(
+                vehicle_type_option,
+            ))),
+            PageOption::VehicleForm(vt) => Ok(Self::vehicle_form(vt)),
+            PageOption::AddNewItem => Ok(Page::List(ListPage::new(
                 "Создание предмета (выберете что создать)",
                 PageOption::MainMenu,
-                ItemTypes::iter()
-                        .map(|t| (t.to_string(), Action::Go(PageOption::AddNewItemForm(t))))
-                        .collect()
-            )),
-            PageOption::AddNewItemForm(it) => Self::item_form(it),
-            PageOption::EnergyStatistic => {
-                Page::List(ListPage::new(
+                item_type_option,
+            ))),
+            PageOption::ItemForm(it) => Ok(Self::item_form(it)),
+            PageOption::EnergyStatistics => {
+                Ok(Page::List(ListPage::new(
                     "Затраты энергии",
                     PageOption::MainMenu,
-                    sc.energy_statistic().iter()
-                    .map(|s| (s.clone(), Action::None))
-                    .collect()
-                ))
+                    ServiceCenter::energy_statistic_options,
+                )))
             },
-            PageOption::NubList => {
-                Page::List(ListPage::new(
+            PageOption::BeginnersList => {
+                Ok(Page::List(ListPage::new(
                     "Список техники для новичков 🥴",
                     // раст работает на UTF-8 поэтому поддерживает смайлики нативно 🥳🦄
                     PageOption::MainMenu,
-                    sc.nublist().iter()
-                        .map(|f| (f.clone(), Action::None))
-                        .collect()
-                ))
+                    ServiceCenter::nublist_options,
+                )))
             },
-            PageOption::SaveToFile => {
-                Page::List(ListPage::new(
-                    "Сохраненине в файл. Вы уверены?",
+            PageOption::DataOperations => {
+                Ok(Page::List(ListPage::new(
+                    "Операции с данными",
                     PageOption::MainMenu,
-                    vec![("Подтвердить".to_string(), Action::Save), ("Отменить".to_string(), Action::Back)]
-                ))
+                    data_operation_option,
+                )))
             },
-            PageOption::LoadFromFile => {
-                Page::List(ListPage::new(
-                    "Загрузка из файла. Вы уверены?",
-                    PageOption::MainMenu,
-                    vec![("Подтвердить".to_string(), Action::Load), ("Отменить".to_string(), Action::Back)]
-                ))
-            },
-            PageOption::ErrorPage => {
-                Page::Text(TextPage {
+            PageOption::Exit => Err(ExitError::Exit),
+            PageOption::Error => {
+                Ok(Page::Text(TextPage {
                     text: "ошибка: ошибок пока не видно".to_string(),
                     backpage: PageOption::MainMenu
-                })
+                }))
             }
+        }
+    }
+
+    fn error_page(error: impl std::fmt::Display) -> Page {
+        Page::Text(TextPage {
+            text: format!("Упс! Произошла ошибка: {}", error),
+            backpage: PageOption::MainMenu,
+        })
+    }
+
+    fn set_page(&mut self, mut page: Page) {
+        if page.is_main_menu() {
+            if let Some(saved) = self.main_menu.take() {
+                page = saved;
+            }
+        }
+        if self.page.is_main_menu() {
+            self.main_menu = Some(std::mem::replace(&mut self.page, page));
+        } else {
+            self.page = page;
         }
     }
 
     fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
         loop {
+            
             terminal.draw(|frame| self.draw(frame))?;
-            self.handle_events()?;
-            match self.page.move_to(&mut self.sc) {
-                Action::Back => self.page = Self::build_page(self.page.back(), &self.sc),
-                Action::None => {}
-                Action::Quit => { break; },
-                Action::Go(p) => self.page = Self::build_page(p, &self.sc),
-                Action::Load => match self.sc.load() {
-                    Err(e) => {
-                        let error = format!("Err: {}", e);
-                        self.page = Page::Text(TextPage {
-                            text: format!("Упс! Произошла ошибка: {}", error),
-                            backpage: PageOption::MainMenu
-                        });
-                    },
-                    Ok(()) => self.page = Self::build_page(PageOption::MainMenu, &self.sc)
-                },
-                Action::Save => match self.sc.save() {
-                    Err(e) => {
-                        let error = format!("Err: {}", e);
-                        self.page = Page::Text(TextPage {
-                            text: format!("Упс! Произошла ошибка: {}", error),
-                            backpage: PageOption::MainMenu
-                        });
-                    },
-                    Ok(()) => self.page = Self::build_page(PageOption::MainMenu, &self.sc)
+            let action = match self.handle_events() {
+                Ok(action) => action,
+                Err(ExitError::Exit) => break,
+                Err(error) => {
+                    self.set_page(Self::error_page(error));
+                    continue;
                 }
+            };
+            let built = match action {
+                Action::None => None,
+                Action::Back => Some(Self::build_page(self.page.back(), &self.sc)),
+                Action::Go(p) => Some(Self::build_page(p, &self.sc)),
+                Action::Load => Some(match self.sc.load() {
+                    Err(e) => Ok(Self::error_page(e)),
+                    Ok(()) => Self::build_page(PageOption::MainMenu, &self.sc),
+                }),
+                Action::Save => Some(match self.sc.save() {
+                    Err(e) => Ok(Self::error_page(e)),
+                    Ok(()) => Self::build_page(PageOption::MainMenu, &self.sc),
+                }),
+                Action::LoadExample => Some(match self.sc.load_example() {
+                    Err(e) => Ok(Self::error_page(e)),
+                    Ok(()) => Self::build_page(PageOption::MainMenu, &self.sc),
+                }),
+            };
+            match built {
+                Some(Ok(page)) => self.set_page(page),
+                Some(Err(ExitError::Exit)) => break,
+                Some(Err(error)) => self.set_page(Self::error_page(error)),
+                None => {}
             }
         }
         self.sc.save().ok();
@@ -494,18 +610,42 @@ impl App {
         self.page.draw(frame, &mut self.sc)
     }
 
-    fn handle_events(&mut self) -> io::Result<()> {
+    fn handle_events(&mut self) -> Result<Action, ExitError> {
         if let Event::Key(key_event) = event::read()? {
             if key_event.kind == KeyEventKind::Press {
                 if key_event.code == KeyCode::Esc {
                     let back = self.page.back();
-                    self.page = Self::build_page(back, &self.sc);
+                    self.set_page(Self::build_page(back, &self.sc)?);
                 } else {
                     self.page.handle_key_event(key_event, &mut self.sc);
                 }
             }
         }
-        Ok(())
+        Ok(self.page.move_to(&mut self.sc))
     }
+}
+
+fn main_menu_option(_sc: &ServiceCenter, ind: usize) -> Option<(String, Action)> {
+    App::main_menu_options().into_iter().nth(ind)
+}
+
+fn data_operation_option(_sc: &ServiceCenter, ind: usize) -> Option<(String, Action)> {
+    vec![
+        ("сохранить".to_string(), Action::Save),
+        ("загрузить".to_string(), Action::Load),
+        ("восстановить до example.json".to_string(), Action::LoadExample),
+    ].into_iter().nth(ind)
+}
+
+fn vehicle_type_option(_sc: &ServiceCenter, ind: usize) -> Option<(String, Action)> {
+    VehicleTypes::iter()
+        .nth(ind)
+        .map(|t| (t.to_string(), Action::Go(PageOption::VehicleForm(t))))
+}
+
+fn item_type_option(_sc: &ServiceCenter, ind: usize) -> Option<(String, Action)> {
+    ItemTypes::iter()
+        .nth(ind)
+        .map(|t| (t.to_string(), Action::Go(PageOption::ItemForm(t))))
 }
 
