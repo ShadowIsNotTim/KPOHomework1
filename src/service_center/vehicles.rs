@@ -2,7 +2,7 @@ use std::rc::Rc;
 use ratatui_textarea::TextArea;
 use serde::{Serialize, Deserialize};
 
-use super::{AreaVec, ServiceCenter, KWh, FormatError, required_text, parse_f32, parse_bool};
+use super::{AreaVec, ServiceCenter, KWh, FormatError, model_text, parse_f32, parse_bool};
 use super::super::{BuildAreasFnT, DoneFnT};
 use strum::{Display, EnumIter};
 
@@ -131,7 +131,7 @@ impl Vehicle for ElectricScooter {
         let id = sc.next_transport_id();
         sc.add_transport(Rc::new(ElectricScooter {
             id,
-            model: required_text(areas, 0)?,
+            model: model_text(areas, 0)?,
             energy: KWh(parse_f32(areas, 1)?),
             capacity: KWh(parse_f32(areas, 2)?),
             wheel_diameter: Mm(parse_f32(areas, 3)?),
@@ -182,7 +182,7 @@ impl Vehicle for ElectricBike {
         let id = sc.next_transport_id();
         sc.add_transport(Rc::new(ElectricBike {
             id,
-            model: required_text(areas, 0)?,
+            model: model_text(areas, 0)?,
             energy: KWh(parse_f32(areas, 1)?),
             capacity: KWh(parse_f32(areas, 2)?),
             wheel_diameter: Mm(parse_f32(areas, 3)?),
@@ -234,7 +234,7 @@ impl Vehicle for Bicycle {
         let id = sc.next_transport_id();
         sc.add_transport(Rc::new(Bicycle {
             id,
-            model: required_text(areas, 0)?,
+            model: model_text(areas, 0)?,
             wheel_diameter: Mm(parse_f32(areas, 1)?),
         }));
         Ok(())
@@ -245,6 +245,12 @@ impl Vehicle for Bicycle {
 mod test {
     use super::*;
 
+    fn areas(values: &[&str]) -> AreaVec {
+        values.iter()
+            .map(|v| ("field".to_string(), TextArea::new(vec![v.to_string()])))
+            .collect()
+    }
+
     #[test]
     fn test_bycycle() {
         let mut areas = AreaVec::new();
@@ -252,5 +258,104 @@ mod test {
 
         assert_eq!(areas.len(), 2);
         assert_eq!(areas[0].0, "Модель".to_string());
+    }
+
+    #[test]
+    fn electric_scooter_done_ok() {
+        let a = areas(&["Xiaomi Mi Pro 2", "0.5", "1.0", "8.5"]);
+        let mut sc = ServiceCenter::new();
+        assert!(ElectricScooter::done(&a, &mut sc).is_ok());
+        let (label, _) = sc.transport_options(0).unwrap();
+        assert!(label.contains("Xiaomi Mi Pro 2"), "label={label}");
+        assert!(label.contains("0.5/1"), "label={label}");
+    }
+
+    #[test]
+    fn electric_scooter_rejects_bad_floats() {
+        for (energy, capacity, wheel) in [
+            ("-1", "1.0", "8.5"),
+            ("-0", "1.0", "8.5"),
+            ("inf", "1.0", "8.5"),
+            ("nan", "1.0", "8.5"),
+            ("1e999", "1.0", "8.5"),
+            ("abc", "1.0", "8.5"),
+            ("0.5", "-1", "8.5"),
+            ("0.5", "1.0", "inf"),
+            ("0.5", "1.0", "nan"),
+        ] {
+            let a = areas(&["Xiaomi", energy, capacity, wheel]);
+            let mut sc = ServiceCenter::new();
+            assert!(ElectricScooter::done(&a, &mut sc).is_err(),
+                "energy={energy} capacity={capacity} wheel={wheel}");
+        }
+    }
+
+    #[test]
+    fn electric_scooter_rejects_long_and_empty_model() {
+        let long = "a".repeat(100);
+        let a = areas(&[long.as_str(), "0.5", "1.0", "8.5"]);
+        let mut sc = ServiceCenter::new();
+        assert!(ElectricScooter::done(&a, &mut sc).is_err());
+
+        let empty = areas(&["", "0.5", "1.0", "8.5"]);
+        let mut sc = ServiceCenter::new();
+        assert!(ElectricScooter::done(&empty, &mut sc).is_err());
+    }
+
+    #[test]
+    fn electric_bike_done_ok() {
+        let a = areas(&["Super73", "0.9", "1.8", "20", "yes"]);
+        let mut sc = ServiceCenter::new();
+        assert!(ElectricBike::done(&a, &mut sc).is_ok());
+        let (label, _) = sc.transport_options(0).unwrap();
+        assert!(label.contains("Super73"), "label={label}");
+        assert!(label.contains("пассажир: да"), "label={label}");
+    }
+
+    #[test]
+    fn electric_bike_rejects_bad_floats() {
+        for bad in ["-1", "-0", "inf", "nan", "abc"] {
+            let a = areas(&["Super73", bad, "1.8", "20", "yes"]);
+            let mut sc = ServiceCenter::new();
+            assert!(ElectricBike::done(&a, &mut sc).is_err(), "bad={bad}");
+
+            let a = areas(&["Super73", "0.9", bad, "20", "yes"]);
+            let mut sc = ServiceCenter::new();
+            assert!(ElectricBike::done(&a, &mut sc).is_err(), "bad={bad}");
+
+            let a = areas(&["Super73", "0.9", "1.8", bad, "yes"]);
+            let mut sc = ServiceCenter::new();
+            assert!(ElectricBike::done(&a, &mut sc).is_err(), "bad={bad}");
+        }
+    }
+
+    #[test]
+    fn electric_bike_rejects_long_model() {
+        let long = "a".repeat(100);
+        let a = areas(&[long.as_str(), "0.9", "1.8", "20", "yes"]);
+        let mut sc = ServiceCenter::new();
+        assert!(ElectricBike::done(&a, &mut sc).is_err());
+    }
+
+    #[test]
+    fn bicycle_done_ok() {
+        let a = areas(&["Stels", "26"]);
+        let mut sc = ServiceCenter::new();
+        assert!(Bicycle::done(&a, &mut sc).is_ok());
+        let (label, _) = sc.transport_options(0).unwrap();
+        assert!(label.contains("Stels"), "label={label}");
+    }
+
+    #[test]
+    fn bicycle_rejects_bad_wheel_and_model() {
+        for bad in ["-1", "-0", "inf", "nan", "abc"] {
+            let a = areas(&["Stels", bad]);
+            let mut sc = ServiceCenter::new();
+            assert!(Bicycle::done(&a, &mut sc).is_err(), "bad={bad}");
+        }
+        let long = "a".repeat(100);
+        let a = areas(&[long.as_str(), "26"]);
+        let mut sc = ServiceCenter::new();
+        assert!(Bicycle::done(&a, &mut sc).is_err());
     }
 }

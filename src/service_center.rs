@@ -58,11 +58,34 @@ fn required_text(areas: &AreaVec, ind: usize) -> Result<String, FormatError> {
     Ok(text)
 }
 
+const MAX_MODEL_LEN: usize = 64;
+
+fn model_text(areas: &AreaVec, ind: usize) -> Result<String, FormatError> {
+    let text = required_text(areas, ind)?;
+    if text.chars().count() > MAX_MODEL_LEN {
+        return Err(FormatError::new(format!(
+            "поле «{}»: длина не должна превышать {} символов", field(areas, ind), MAX_MODEL_LEN
+        )));
+    }
+    Ok(text)
+}
+
 fn parse_f32(areas: &AreaVec, ind: usize) -> Result<f32, FormatError> {
     let text = required_text(areas, ind)?;
-    text.parse::<f32>().map_err(|_| FormatError::new(format!(
+    let value: f32 = text.parse().map_err(|_| FormatError::new(format!(
         "поле «{}»: «{}» не является числом", field(areas, ind), text
-    )))
+    )))?;
+    if !value.is_finite() {
+        return Err(FormatError::new(format!(
+            "поле «{}»: «{}» должно быть конечным числом", field(areas, ind), text
+        )));
+    }
+    if value.is_sign_negative() {
+        return Err(FormatError::new(format!(
+            "поле «{}»: «{}» не может быть отрицательным", field(areas, ind), text
+        )));
+    }
+    Ok(value)
 }
 
 fn parse_u8(areas: &AreaVec, ind: usize) -> Result<u8, FormatError> {
@@ -178,4 +201,68 @@ impl ServiceCenter {
         self.items.get(ind).map(|i| (i.to_string(), Action::None))
     }
 
+}
+
+#[cfg(test)]
+mod parse_tests {
+    use super::*;
+
+    fn areas(values: &[&str]) -> AreaVec {
+        values.iter()
+            .map(|v| ("field".to_string(), TextArea::new(vec![v.to_string()])))
+            .collect()
+    }
+
+    #[test]
+    fn parse_f32_ok() {
+        assert_eq!(parse_f32(&areas(&["1.5"]), 0).unwrap(), 1.5);
+        assert_eq!(parse_f32(&areas(&["0"]), 0).unwrap(), 0.0);
+        assert_eq!(parse_f32(&areas(&["  2.25  "]), 0).unwrap(), 2.25);
+    }
+
+    #[test]
+    fn parse_f32_rejects_negative() {
+        assert!(parse_f32(&areas(&["-1"]), 0).is_err());
+        assert!(parse_f32(&areas(&["-0.5"]), 0).is_err());
+        assert!(parse_f32(&areas(&["-0"]), 0).is_err());
+        assert!(parse_f32(&areas(&["-0.0"]), 0).is_err());
+    }
+
+    #[test]
+    fn parse_f32_rejects_infinite() {
+        assert!(parse_f32(&areas(&["inf"]), 0).is_err());
+        assert!(parse_f32(&areas(&["-inf"]), 0).is_err());
+        assert!(parse_f32(&areas(&["1e999"]), 0).is_err());
+    }
+
+    #[test]
+    fn parse_f32_rejects_nan() {
+        assert!(parse_f32(&areas(&["nan"]), 0).is_err());
+    }
+
+    #[test]
+    fn parse_f32_rejects_garbage() {
+        assert!(parse_f32(&areas(&["abc"]), 0).is_err());
+        assert!(parse_f32(&areas(&[""]), 0).is_err());
+    }
+
+    #[test]
+    fn parse_u8_ok() {
+        assert_eq!(parse_u8(&areas(&["0"]), 0).unwrap(), 0);
+        assert_eq!(parse_u8(&areas(&["255"]), 0).unwrap(), 255);
+    }
+
+    #[test]
+    fn parse_u8_rejects_overflow() {
+        assert!(parse_u8(&areas(&["256"]), 0).is_err());
+        assert!(parse_u8(&areas(&["300"]), 0).is_err());
+        assert!(parse_u8(&areas(&["99999999999999999999"]), 0).is_err());
+    }
+
+    #[test]
+    fn parse_u8_rejects_garbage() {
+        assert!(parse_u8(&areas(&["-1"]), 0).is_err());
+        assert!(parse_u8(&areas(&["1.5"]), 0).is_err());
+        assert!(parse_u8(&areas(&[""]), 0).is_err());
+    }
 }

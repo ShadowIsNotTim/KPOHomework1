@@ -103,6 +103,11 @@ impl Item for ChargingStation {
 
     fn done(areas: &AreaVec, sc: &mut ServiceCenter) -> Result<(), FormatError> {
         let port_count = parse_u8(areas, 0)?;
+        if port_count == 0 {
+            return Err(FormatError::new(format!(
+                "поле «{}»: должно быть хотя бы 1", areas[0].0
+            )));
+        }
         let charge_speed = parse_f32(areas, 1)?;
         let id = sc.next_item_id();
         sc.add_item(Rc::new(ChargingStation {
@@ -144,6 +149,114 @@ impl Item for Helmet {
         let id = sc.next_item_id();
         sc.add_item(Rc::new(Helmet { id, size, is_damaged }));
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    fn areas(values: &[&str]) -> AreaVec {
+        values.iter()
+            .map(|v| ("field".to_string(), TextArea::new(vec![v.to_string()])))
+            .collect()
+    }
+
+    #[test]
+    fn clothing_size_parse_ok() {
+        let cases = [
+            ("S", ClothingSize::S),
+            ("s", ClothingSize::S),
+            ("M", ClothingSize::M),
+            ("m", ClothingSize::M),
+            ("L", ClothingSize::L),
+            ("l", ClothingSize::L),
+            ("XL", ClothingSize::XL),
+            ("xl", ClothingSize::XL),
+            (" Xl ", ClothingSize::XL),
+        ];
+        for (raw, expected) in cases {
+            assert_eq!(ClothingSize::parse(raw).unwrap(), expected, "raw={raw}");
+        }
+    }
+
+    #[test]
+    fn clothing_size_parse_rejects_wrong_layout() {
+        for raw in ["М", "м", "Ь", "ь", "Ы", "ы", "Д", "д", "Х", "х", "Ч", "ч", "ЧД", "чд", "хl", "Хl"] {
+            assert!(ClothingSize::parse(raw).is_err(), "raw={raw}");
+        }
+    }
+
+    #[test]
+    fn clothing_size_parse_invalid() {
+        for raw in ["", "XXL", "1", "ф", "SML", "xs", "X"] {
+            assert!(ClothingSize::parse(raw).is_err(), "raw={raw}");
+        }
+    }
+
+    #[test]
+    fn charging_station_done_ok() {
+        let a = areas(&["2", "22.5"]);
+        let mut sc = ServiceCenter::new();
+        assert!(ChargingStation::done(&a, &mut sc).is_ok());
+        let (label, _) = sc.item_options(0).unwrap();
+        assert!(label.contains("портов 2"), "label={label}");
+        assert!(label.contains("22.5"), "label={label}");
+    }
+
+    #[test]
+    fn charging_station_done_rejects_negative_speed() {
+        for bad in ["-1", "-0", "-0.0"] {
+            let a = areas(&["2", bad]);
+            let mut sc = ServiceCenter::new();
+            assert!(ChargingStation::done(&a, &mut sc).is_err(), "bad={bad}");
+        }
+    }
+
+    #[test]
+    fn charging_station_done_rejects_infinite_speed() {
+        for bad in ["inf", "-inf", "1e999"] {
+            let a = areas(&["2", bad]);
+            let mut sc = ServiceCenter::new();
+            assert!(ChargingStation::done(&a, &mut sc).is_err(), "bad={bad}");
+        }
+    }
+
+    #[test]
+    fn charging_station_done_rejects_nan_speed() {
+        let a = areas(&["2", "nan"]);
+        let mut sc = ServiceCenter::new();
+        assert!(ChargingStation::done(&a, &mut sc).is_err());
+    }
+
+    #[test]
+    fn charging_station_done_rejects_bad_port_count() {
+        for bad in ["0", "300", "-1", "x"] {
+            let a = areas(&[bad, "22"]);
+            let mut sc = ServiceCenter::new();
+            assert!(ChargingStation::done(&a, &mut sc).is_err(), "bad={bad}");
+        }
+    }
+
+    #[test]
+    fn helmet_done_ok() {
+        let a = areas(&["M", "yes"]);
+        let mut sc = ServiceCenter::new();
+        assert!(Helmet::done(&a, &mut sc).is_ok());
+        let (label, _) = sc.item_options(0).unwrap();
+        assert!(label.contains("размер M"), "label={label}");
+        assert!(label.contains("повреждён: да"), "label={label}");
+    }
+
+    #[test]
+    fn helmet_done_rejects_bad_size_and_flag() {
+        let bad_size = areas(&["Гигантский", "no"]);
+        let mut sc = ServiceCenter::new();
+        assert!(Helmet::done(&bad_size, &mut sc).is_err());
+
+        let bad_flag = areas(&["L", "maybe"]);
+        let mut sc = ServiceCenter::new();
+        assert!(Helmet::done(&bad_flag, &mut sc).is_err());
     }
 }
 
