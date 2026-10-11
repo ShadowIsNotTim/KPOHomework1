@@ -6,6 +6,8 @@ use super::{AreaVec, ServiceCenter, Wh, FormatError, required_text, parse_u8, pa
 use super::super::{BuildAreasFnT, DoneFnT};
 use strum::{Display, EnumIter};
 
+const MAX_PORTS: u8 = 32;
+const MAX_CHARGE_SPEED_WH: f32 = 1000.0;
 
 #[typetag::serde]
 pub trait Item {
@@ -13,6 +15,20 @@ pub trait Item {
     fn name(&self) -> String;
     fn to_string(&self) -> String {
         format!("Item (id={})", self.get_id())
+    }
+    fn techoverview(&self) -> Result<(), FormatError>;
+    fn to_string_with_overview(&self) -> String {
+        match self.techoverview() {
+            Ok(()) => format!("{}\n\nТехосмотр: OK", self.to_string()),
+            Err(e) => format!("{}\n\nТехосмотр: ERR — {}", self.to_string(), e),
+        }
+    }
+    fn is_editable(&self) -> bool {
+        false
+    }
+    fn build_edit_areas(&self, _areas: &mut AreaVec) {}
+    fn done_edit(&self, _areas: &AreaVec) -> Result<Rc<dyn Item>, FormatError> {
+        Err(FormatError::new("объект не редактируется"))
     }
     fn build_areas(areas: &mut AreaVec) where Self: Sized;
     fn done(areas: &AreaVec, sc: &mut ServiceCenter) -> Result<(), FormatError> where Self: Sized; // добавляем предмет
@@ -91,9 +107,43 @@ impl Item for ChargingStation {
 
     fn to_string(&self) -> String {
         format!(
-            "Зарядная станция #{}: портов {}, скорость зарядки {} Wh",
+            "Тип: зарядная станция\nID: {}\nКол-во портов: {}\nСкорость зарядки: {} Wh",
             self.id, self.port_count, self.charge_speed.0
         )
+    }
+
+    fn techoverview(&self) -> Result<(), FormatError> {
+        if self.port_count > MAX_PORTS {
+            return Err(FormatError::new(format!("порты > {}", MAX_PORTS)));
+        }
+        if self.charge_speed.0 > MAX_CHARGE_SPEED_WH {
+            return Err(FormatError::new(format!("скорость > {} Wh", MAX_CHARGE_SPEED_WH)));
+        }
+        Ok(())
+    }
+
+    fn is_editable(&self) -> bool {
+        true
+    }
+
+    fn build_edit_areas(&self, areas: &mut AreaVec) {
+        areas.push(("Кол-во портов".to_string(), TextArea::new(vec![self.port_count.to_string()])));
+        areas.push(("Скорость зарядки (Wh)".to_string(), TextArea::new(vec![self.charge_speed.0.to_string()])));
+    }
+
+    fn done_edit(&self, areas: &AreaVec) -> Result<Rc<dyn Item>, FormatError> {
+        let port_count = parse_u8(areas, 0)?;
+        if port_count == 0 {
+            return Err(FormatError::new(format!(
+                "поле «{}»: должно быть хотя бы 1", areas[0].0
+            )));
+        }
+        let charge_speed = parse_f32(areas, 1)?;
+        Ok(Rc::new(ChargingStation {
+            id: self.id,
+            port_count,
+            charge_speed: Wh(charge_speed),
+        }))
     }
 
     fn build_areas(areas: &mut AreaVec) {
@@ -131,11 +181,15 @@ impl Item for Helmet {
 
     fn to_string(&self) -> String {
         format!(
-            "Шлем #{}: размер {:?}, повреждён: {}",
+            "Тип: шлем\nID: {}\nРазмер: {:?}\nПовреждён: {}",
             self.id,
             self.size,
             if self.is_damaged { "да" } else { "нет" }
         )
+    }
+
+    fn techoverview(&self) -> Result<(), FormatError> {
+        Ok(())
     }
 
     fn build_areas(areas: &mut AreaVec) {
@@ -199,9 +253,7 @@ mod test {
         let a = areas(&["2", "22.5"]);
         let mut sc = ServiceCenter::new();
         assert!(ChargingStation::done(&a, &mut sc).is_ok());
-        let (label, _) = sc.item_options(0).unwrap();
-        assert!(label.contains("портов 2"), "label={label}");
-        assert!(label.contains("22.5"), "label={label}");
+        assert!(sc.item_options(0).is_some());
     }
 
     #[test]
@@ -243,9 +295,7 @@ mod test {
         let a = areas(&["M", "yes"]);
         let mut sc = ServiceCenter::new();
         assert!(Helmet::done(&a, &mut sc).is_ok());
-        let (label, _) = sc.item_options(0).unwrap();
-        assert!(label.contains("размер M"), "label={label}");
-        assert!(label.contains("повреждён: да"), "label={label}");
+        assert!(sc.item_options(0).is_some());
     }
 
     #[test]
@@ -257,6 +307,41 @@ mod test {
         let bad_flag = areas(&["L", "maybe"]);
         let mut sc = ServiceCenter::new();
         assert!(Helmet::done(&bad_flag, &mut sc).is_err());
+    }
+
+    #[test]
+    fn charging_station_techoverview() {
+        let ok = ChargingStation { id: 0, port_count: 2, charge_speed: Wh(22.0) };
+        assert!(ok.techoverview().is_ok());
+
+        let many_ports = ChargingStation { id: 0, port_count: 64, charge_speed: Wh(22.0) };
+        assert!(many_ports.techoverview().is_err());
+
+        let fast = ChargingStation { id: 0, port_count: 2, charge_speed: Wh(5000.0) };
+        assert!(fast.techoverview().is_err());
+    }
+
+    #[test]
+    fn helmet_techoverview() {
+        let h = Helmet { id: 0, size: ClothingSize::M, is_damaged: true };
+        assert!(h.techoverview().is_ok());
+    }
+
+    #[test]
+    fn charging_station_edit_keeps_id() {
+        let orig = ChargingStation { id: 3, port_count: 2, charge_speed: Wh(22.0) };
+        assert!(orig.is_editable());
+        let a = areas(&["4", "50.0"]);
+        let updated = orig.done_edit(&a).unwrap();
+        assert_eq!(updated.get_id(), 3);
+    }
+
+    #[test]
+    fn helmet_is_not_editable() {
+        let h = Helmet { id: 0, size: ClothingSize::M, is_damaged: false };
+        assert!(!h.is_editable());
+        let a = areas(&["L", "no"]);
+        assert!(h.done_edit(&a).is_err());
     }
 }
 

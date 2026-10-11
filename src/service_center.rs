@@ -106,6 +106,13 @@ fn parse_bool(areas: &AreaVec, ind: usize) -> Result<bool, FormatError> {
     }
 }
 
+fn review_label(kind: &str, id: u32, error: Option<FormatError>) -> String {
+    match error {
+        None => format!("OK ({} {})", kind, id),
+        Some(e) => format!("ERR ({} {}): {}", kind, id, e),
+    }
+}
+
 
 pub struct ServiceCenter {
     techs: Vec<RVeh>,
@@ -134,6 +141,17 @@ impl ServiceCenter {
     pub fn delete_transport(&mut self, ind: usize) {
         if ind < self.techs.len() {
             self.techs.remove(ind);
+        }
+    }
+
+    pub fn delete_reviewed(&mut self, ind: usize) {
+        if ind < self.techs.len() {
+            self.techs.remove(ind);
+        } else {
+            let i = ind - self.techs.len();
+            if i < self.items.len() {
+                self.items.remove(i);
+            }
         }
     }
 
@@ -194,11 +212,51 @@ impl ServiceCenter {
     }
 
     pub fn transport_options(&self, ind: usize) -> Option<(String, Action)> {
-        self.techs.get(ind).map(|t| (t.to_string(), Action::None))
+        self.techs.get(ind).map(|t| (t.name(), Action::VehicleInfo(ind)))
     }
 
     pub fn item_options(&self, ind: usize) -> Option<(String, Action)> {
-        self.items.get(ind).map(|i| (i.to_string(), Action::None))
+        self.items.get(ind).map(|i| (i.name(), Action::ItemInfo(ind)))
+    }
+
+    pub fn transport_info(&self, ind: usize) -> Option<String> {
+        self.techs.get(ind).map(|t| t.to_string_with_overview())
+    }
+
+    pub fn item_info(&self, ind: usize) -> Option<String> {
+        self.items.get(ind).map(|i| i.to_string_with_overview())
+    }
+
+    pub fn transport_at(&self, ind: usize) -> Option<Rc<dyn Vehicle>> {
+        self.techs.get(ind).cloned()
+    }
+
+    pub fn item_at(&self, ind: usize) -> Option<Rc<dyn Item>> {
+        self.items.get(ind).cloned()
+    }
+
+    pub fn replace_transport(&mut self, ind: usize, v: Rc<dyn Vehicle>) {
+        if ind < self.techs.len() {
+            self.techs[ind] = v;
+        }
+    }
+
+    pub fn replace_item(&mut self, ind: usize, i: Rc<dyn Item>) {
+        if ind < self.items.len() {
+            self.items[ind] = i;
+        }
+    }
+
+    pub fn tech_review_options(&self, ind: usize) -> Option<(String, Action)> {
+        if let Some(t) = self.techs.get(ind) {
+            let label = review_label("Vehicle", t.get_id(), t.techoverview().err());
+            return Some((label, Action::VehicleInfo(ind)));
+        }
+        let i = ind.saturating_sub(self.techs.len());
+        self.items.get(i).map(|it| {
+            let label = review_label("Item", it.get_id(), it.techoverview().err());
+            (label, Action::ItemInfo(i))
+        })
     }
 
 }

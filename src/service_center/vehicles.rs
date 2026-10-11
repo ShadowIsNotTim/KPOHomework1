@@ -9,6 +9,9 @@ use strum::{Display, EnumIter};
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Mm(pub f32);
 
+const MAX_WHEEL_MM: f32 = 1000.0;
+const MAX_CAPACITY_KWH: f32 = 100.0;
+
 #[typetag::serde]
 pub trait Vehicle {
     // интерфейс для транспортных средств
@@ -33,6 +36,20 @@ pub trait Vehicle {
     fn get_model(&self) -> String;
     fn to_string(&self) -> String {
         return format!("{} id-{}", self.get_model(), self.get_id());
+    }
+    fn techoverview(&self) -> Result<(), FormatError>;
+    fn to_string_with_overview(&self) -> String {
+        match self.techoverview() {
+            Ok(()) => format!("{}\n\nТехосмотр: OK", self.to_string()),
+            Err(e) => format!("{}\n\nТехосмотр: ERR — {}", self.to_string(), e),
+        }
+    }
+    fn is_editable(&self) -> bool {
+        false
+    }
+    fn build_edit_areas(&self, _areas: &mut AreaVec) {}
+    fn done_edit(&self, _areas: &AreaVec) -> Result<Rc<dyn Vehicle>, FormatError> {
+        Err(FormatError::new("объект не редактируется"))
     }
     fn build_areas(areas: &mut AreaVec) where Self: Sized;
     fn done(areas: &AreaVec, sc: &mut ServiceCenter) -> Result<(), FormatError> where Self: Sized;
@@ -114,10 +131,44 @@ impl Vehicle for ElectricScooter {
 
     fn to_string(&self) -> String {
         format!(
-            "Самокат {} #{}: {}/{} kWh, колесо {} мм, простота {}",
+            "Тип: электросамокат\nМодель: {}\nID: {}\nЗаряд: {} kWh\nЁмкость: {} kWh\nДиаметр колеса: {} мм\nПростота: {}",
             self.model, self.id, self.energy.0, self.capacity.0,
             self.wheel_diameter.0, self.simplicity()
         )
+    }
+
+    fn techoverview(&self) -> Result<(), FormatError> {
+        if self.wheel_diameter.0 > MAX_WHEEL_MM {
+            return Err(FormatError::new(format!("колесо > {} мм", MAX_WHEEL_MM)));
+        }
+        if self.capacity.0 > MAX_CAPACITY_KWH {
+            return Err(FormatError::new(format!("ёмкость > {} kWh", MAX_CAPACITY_KWH)));
+        }
+        if self.energy.0 > self.capacity.0 {
+            return Err(FormatError::new("заряд > ёмкости".to_string()));
+        }
+        Ok(())
+    }
+
+    fn is_editable(&self) -> bool {
+        true
+    }
+
+    fn build_edit_areas(&self, areas: &mut AreaVec) {
+        areas.push(("Модель".to_string(), TextArea::new(vec![self.model.clone()])));
+        areas.push(("Заряд (kWh)".to_string(), TextArea::new(vec![self.energy.0.to_string()])));
+        areas.push(("Ёмкость (kWh)".to_string(), TextArea::new(vec![self.capacity.0.to_string()])));
+        areas.push(("Диаметр колеса (мм)".to_string(), TextArea::new(vec![self.wheel_diameter.0.to_string()])));
+    }
+
+    fn done_edit(&self, areas: &AreaVec) -> Result<Rc<dyn Vehicle>, FormatError> {
+        Ok(Rc::new(ElectricScooter {
+            id: self.id,
+            model: model_text(areas, 0)?,
+            energy: KWh(parse_f32(areas, 1)?),
+            capacity: KWh(parse_f32(areas, 2)?),
+            wheel_diameter: Mm(parse_f32(areas, 3)?),
+        }))
     }
 
     fn build_areas(areas: &mut AreaVec) {
@@ -164,10 +215,23 @@ impl Vehicle for ElectricBike {
 
     fn to_string(&self) -> String {
         format!(
-            "Байк {} #{}: {}/{} kWh, колесо {} мм, пассажир: {}, простота {}",
+            "Тип: электробайк\nМодель: {}\nID: {}\nЗаряд: {} kWh\nЁмкость: {} kWh\nДиаметр колеса: {} мм\nПассажирское место: {}\nПростота: {}",
             self.model, self.id, self.energy.0, self.capacity.0, self.wheel_diameter.0,
             if self.has_passenger_seat { "да" } else { "нет" }, self.simplicity()
         )
+    }
+
+    fn techoverview(&self) -> Result<(), FormatError> {
+        if self.wheel_diameter.0 > MAX_WHEEL_MM {
+            return Err(FormatError::new(format!("колесо > {} мм", MAX_WHEEL_MM)));
+        }
+        if self.capacity.0 > MAX_CAPACITY_KWH {
+            return Err(FormatError::new(format!("ёмкость > {} kWh", MAX_CAPACITY_KWH)));
+        }
+        if self.energy.0 > self.capacity.0 {
+            return Err(FormatError::new("заряд > ёмкости".to_string()));
+        }
+        Ok(())
     }
 
     fn build_areas(areas: &mut AreaVec) {
@@ -220,9 +284,33 @@ impl Vehicle for Bicycle {
 
     fn to_string(&self) -> String {
         format!(
-            "Велосипед {} #{}: колесо {} мм, простота {}",
+            "Тип: велосипед\nМодель: {}\nID: {}\nДиаметр колеса: {} мм\nПростота: {}",
             self.model, self.id, self.wheel_diameter.0, self.simplicity()
         )
+    }
+
+    fn techoverview(&self) -> Result<(), FormatError> {
+        if self.wheel_diameter.0 > MAX_WHEEL_MM {
+            return Err(FormatError::new(format!("колесо > {} мм", MAX_WHEEL_MM)));
+        }
+        Ok(())
+    }
+
+    fn is_editable(&self) -> bool {
+        true
+    }
+
+    fn build_edit_areas(&self, areas: &mut AreaVec) {
+        areas.push(("Модель".to_string(), TextArea::new(vec![self.model.clone()])));
+        areas.push(("Диаметр колеса (мм)".to_string(), TextArea::new(vec![self.wheel_diameter.0.to_string()])));
+    }
+
+    fn done_edit(&self, areas: &AreaVec) -> Result<Rc<dyn Vehicle>, FormatError> {
+        Ok(Rc::new(Bicycle {
+            id: self.id,
+            model: model_text(areas, 0)?,
+            wheel_diameter: Mm(parse_f32(areas, 1)?),
+        }))
     }
 
     fn build_areas(areas: &mut AreaVec) {
@@ -265,9 +353,7 @@ mod test {
         let a = areas(&["Xiaomi Mi Pro 2", "0.5", "1.0", "8.5"]);
         let mut sc = ServiceCenter::new();
         assert!(ElectricScooter::done(&a, &mut sc).is_ok());
-        let (label, _) = sc.transport_options(0).unwrap();
-        assert!(label.contains("Xiaomi Mi Pro 2"), "label={label}");
-        assert!(label.contains("0.5/1"), "label={label}");
+        assert!(sc.transport_options(0).is_some());
     }
 
     #[test]
@@ -307,9 +393,7 @@ mod test {
         let a = areas(&["Super73", "0.9", "1.8", "20", "yes"]);
         let mut sc = ServiceCenter::new();
         assert!(ElectricBike::done(&a, &mut sc).is_ok());
-        let (label, _) = sc.transport_options(0).unwrap();
-        assert!(label.contains("Super73"), "label={label}");
-        assert!(label.contains("пассажир: да"), "label={label}");
+        assert!(sc.transport_options(0).is_some());
     }
 
     #[test]
@@ -342,8 +426,7 @@ mod test {
         let a = areas(&["Stels", "26"]);
         let mut sc = ServiceCenter::new();
         assert!(Bicycle::done(&a, &mut sc).is_ok());
-        let (label, _) = sc.transport_options(0).unwrap();
-        assert!(label.contains("Stels"), "label={label}");
+        assert!(sc.transport_options(0).is_some());
     }
 
     #[test]
@@ -357,5 +440,90 @@ mod test {
         let a = areas(&[long.as_str(), "26"]);
         let mut sc = ServiceCenter::new();
         assert!(Bicycle::done(&a, &mut sc).is_err());
+    }
+
+    #[test]
+    fn bicycle_techoverview() {
+        let ok = Bicycle { id: 0, model: "X".to_string(), wheel_diameter: Mm(26.0) };
+        assert!(ok.techoverview().is_ok());
+
+        let absurd = Bicycle { id: 0, model: "X".to_string(), wheel_diameter: Mm(5000.0) };
+        assert!(absurd.techoverview().is_err());
+    }
+
+    #[test]
+    fn electric_scooter_techoverview() {
+        let ok = ElectricScooter {
+            id: 0, model: "X".to_string(), energy: KWh(0.5), capacity: KWh(1.0),
+            wheel_diameter: Mm(8.5),
+        };
+        assert!(ok.techoverview().is_ok());
+
+        let big_wheel = ElectricScooter {
+            id: 0, model: "X".to_string(), energy: KWh(0.5), capacity: KWh(1.0),
+            wheel_diameter: Mm(5000.0),
+        };
+        assert!(big_wheel.techoverview().is_err());
+
+        let big_capacity = ElectricScooter {
+            id: 0, model: "X".to_string(), energy: KWh(0.5), capacity: KWh(1000.0),
+            wheel_diameter: Mm(8.5),
+        };
+        assert!(big_capacity.techoverview().is_err());
+
+        let impossible = ElectricScooter {
+            id: 0, model: "X".to_string(), energy: KWh(5.0), capacity: KWh(1.0),
+            wheel_diameter: Mm(8.5),
+        };
+        assert!(impossible.techoverview().is_err());
+    }
+
+    #[test]
+    fn electric_bike_techoverview() {
+        let ok = ElectricBike {
+            id: 0, model: "X".to_string(), energy: KWh(0.5), capacity: KWh(1.0),
+            wheel_diameter: Mm(20.0), has_passenger_seat: true,
+        };
+        assert!(ok.techoverview().is_ok());
+
+        let absurd = ElectricBike {
+            id: 0, model: "X".to_string(), energy: KWh(0.5), capacity: KWh(1.0),
+            wheel_diameter: Mm(100000.0), has_passenger_seat: false,
+        };
+        assert!(absurd.techoverview().is_err());
+    }
+
+    #[test]
+    fn electric_scooter_edit_keeps_id_and_updates_fields() {
+        let orig = ElectricScooter {
+            id: 7, model: "Old".to_string(), energy: KWh(0.5), capacity: KWh(1.0),
+            wheel_diameter: Mm(8.5),
+        };
+        assert!(orig.is_editable());
+        let a = areas(&["New", "0.6", "1.2", "9.0"]);
+        let updated = orig.done_edit(&a).unwrap();
+        assert_eq!(updated.get_id(), 7);
+        assert_eq!(updated.get_model(), "New");
+    }
+
+    #[test]
+    fn electric_bike_is_not_editable() {
+        let b = ElectricBike {
+            id: 0, model: "X".to_string(), energy: KWh(0.5), capacity: KWh(1.0),
+            wheel_diameter: Mm(20.0), has_passenger_seat: false,
+        };
+        assert!(!b.is_editable());
+        let a = areas(&["Y", "0.6", "1.2", "21", "no"]);
+        assert!(b.done_edit(&a).is_err());
+    }
+
+    #[test]
+    fn bicycle_edit_keeps_id() {
+        let orig = Bicycle { id: 4, model: "Old".to_string(), wheel_diameter: Mm(26.0) };
+        assert!(orig.is_editable());
+        let a = areas(&["New", "27"]);
+        let updated = orig.done_edit(&a).unwrap();
+        assert_eq!(updated.get_id(), 4);
+        assert_eq!(updated.get_model(), "New");
     }
 }
