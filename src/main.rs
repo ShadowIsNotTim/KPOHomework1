@@ -28,7 +28,7 @@ pub enum PageOption {
     TransportList,
     #[strum(to_string = "статистика потребления энергии")]
     EnergyStatistics,
-    #[strum(to_string = "список устройств для новичков")]
+    #[strum(to_string = "список техники для новичков")]
     BeginnersList,
     #[strum(to_string = "инвентарь")]
     Inventory,
@@ -602,10 +602,6 @@ impl App {
                         |sc, ind| { sc.delete_reviewed(ind); Action::None })
                      .set_key_code_event('e', "редактировать".to_string(),
                         review_edit_action)
-                     .set_key_code_event('t', "взять".to_string(),
-                        |sc, ind| { sc.set_reviewed_taken(ind, true); Action::None })
-                     .set_key_code_event('p', "положить".to_string(),
-                        |sc, ind| { sc.set_reviewed_taken(ind, false); Action::None })
                 ))
             },
             PageOption::VehicleEdit(ind) => match sc.transport_at(ind) {
