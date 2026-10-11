@@ -65,6 +65,16 @@ cargo run
 cargo test
 ```
 
+Покрытие ~40%
+Покрывал в основном логику `items.rs`, `vehicles.rs`.
+Модуль `main.rs` покрыт слабо потому что содержит в основном составляющие интерфейса.
+
+Полная статистика:
+```sh
+cargo install cargo-llvm-cov
+cargo llvm-cov
+```
+
 ## Общая схема архитектуры
 
 ![Компоненты и связи](architecture.png)
