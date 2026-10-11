@@ -204,6 +204,7 @@ impl ServiceCenter {
     pub fn nublist_options(&self, ind: usize) -> Option<(String, Action)> {
         self.techs.iter()
             .filter(|t| t.for_beginners())
+            .filter(|t| !t.is_taken())
             .nth(ind)
             .map(|t| (
                 format!("`{}` с простотой: {}", t.name(), t.simplicity()),
@@ -244,6 +245,43 @@ impl ServiceCenter {
     pub fn replace_item(&mut self, ind: usize, i: Rc<dyn Item>) {
         if ind < self.items.len() {
             self.items[ind] = i;
+        }
+    }
+
+    pub fn set_vehicle_taken(&mut self, ind: usize, taken: bool) {
+        if ind < self.techs.len() {
+            self.techs[ind] = self.techs[ind].clone().set_taken(taken);
+        }
+    }
+
+    pub fn set_item_taken(&mut self, ind: usize, taken: bool) {
+        if ind < self.items.len() {
+            self.items[ind] = self.items[ind].clone().set_taken(taken);
+        }
+    }
+
+    fn beginner_real_index(&self, ind: usize) -> Option<usize> {
+        self.techs.iter()
+            .enumerate()
+            .filter(|(_, t)| t.for_beginners() && !t.is_taken())
+            .map(|(i, _)| i)
+            .nth(ind)
+    }
+
+    pub fn set_beginner_taken(&mut self, ind: usize, taken: bool) {
+        if let Some(real) = self.beginner_real_index(ind) {
+            self.set_vehicle_taken(real, taken);
+        }
+    }
+
+    pub fn set_reviewed_taken(&mut self, ind: usize, taken: bool) {
+        if ind < self.techs.len() {
+            self.set_vehicle_taken(ind, taken);
+        } else {
+            let i = ind - self.techs.len();
+            if i < self.items.len() {
+                self.set_item_taken(i, taken);
+            }
         }
     }
 
@@ -322,5 +360,66 @@ mod parse_tests {
         assert!(parse_u8(&areas(&["-1"]), 0).is_err());
         assert!(parse_u8(&areas(&["1.5"]), 0).is_err());
         assert!(parse_u8(&areas(&[""]), 0).is_err());
+    }
+
+    #[test]
+    fn take_put_mechanic_one_item_two_vehicles() {
+        let mut sc = ServiceCenter::new();
+
+        ElectricScooter::done(&areas(&["Xiaomi", "0.5", "1.0", "8.5"]), &mut sc).unwrap();
+        Bicycle::done(&areas(&["Stels", "26"]), &mut sc).unwrap();
+        Helmet::done(&areas(&["M", "no"]), &mut sc).unwrap();
+
+        assert!(!sc.transport_at(0).unwrap().is_taken());
+        assert!(!sc.transport_at(1).unwrap().is_taken());
+        assert!(!sc.item_at(0).unwrap().is_taken());
+
+        sc.set_vehicle_taken(0, true);
+        assert!(sc.transport_at(0).unwrap().is_taken());
+        assert!(!sc.transport_at(1).unwrap().is_taken());
+
+        sc.set_vehicle_taken(0, false);
+        assert!(!sc.transport_at(0).unwrap().is_taken());
+
+        sc.set_item_taken(0, true);
+        assert!(sc.item_at(0).unwrap().is_taken());
+
+        sc.set_item_taken(0, false);
+        assert!(!sc.item_at(0).unwrap().is_taken());
+    }
+
+    #[test]
+    fn taken_vehicle_hidden_from_nublist() {
+        let mut sc = ServiceCenter::new();
+
+        ElectricScooter::done(&areas(&["Xiaomi", "0.5", "1.0", "8.5"]), &mut sc).unwrap();
+        Bicycle::done(&areas(&["Stels", "26"]), &mut sc).unwrap();
+
+        assert!(sc.nublist_options(0).is_some());
+
+        sc.set_vehicle_taken(1, true);
+        assert!(sc.nublist_options(0).is_none());
+
+        sc.set_vehicle_taken(1, false);
+        assert!(sc.nublist_options(0).is_some());
+    }
+
+    #[test]
+    fn set_beginner_taken_maps_filtered_index() {
+        let mut sc = ServiceCenter::new();
+
+        ElectricScooter::done(&areas(&["Xiaomi", "0.5", "1.0", "8.5"]), &mut sc).unwrap();
+        Bicycle::done(&areas(&["Stels", "26"]), &mut sc).unwrap();
+        Bicycle::done(&areas(&["Forward", "24"]), &mut sc).unwrap();
+
+        assert!(sc.nublist_options(0).is_some());
+        assert!(sc.nublist_options(1).is_some());
+
+        sc.set_beginner_taken(0, true);
+        assert!(!sc.transport_at(0).unwrap().is_taken());
+        assert!(sc.transport_at(1).unwrap().is_taken());
+        assert!(!sc.transport_at(2).unwrap().is_taken());
+        assert!(sc.nublist_options(0).is_some());
+        assert!(sc.nublist_options(1).is_none());
     }
 }

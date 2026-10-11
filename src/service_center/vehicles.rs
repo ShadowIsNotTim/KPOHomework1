@@ -47,6 +47,8 @@ pub trait Vehicle {
     fn is_editable(&self) -> bool {
         false
     }
+    fn is_taken(&self) -> bool;
+    fn set_taken(self: Rc<Self>, taken: bool) -> Rc<dyn Vehicle>;
     fn build_edit_areas(&self, _areas: &mut AreaVec) {}
     fn done_edit(&self, _areas: &AreaVec) -> Result<Rc<dyn Vehicle>, FormatError> {
         Err(FormatError::new("объект не редактируется"))
@@ -61,7 +63,8 @@ pub struct ElectricScooter {
     model: String,
     energy: KWh,
     capacity: KWh,
-    wheel_diameter: Mm
+    wheel_diameter: Mm,
+    taken: bool
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -71,14 +74,16 @@ pub struct ElectricBike {
     energy: KWh,
     capacity: KWh,
     wheel_diameter: Mm,
-    has_passenger_seat: bool
+    has_passenger_seat: bool,
+    taken: bool
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Bicycle {
     id: u32,
     model: String,
-    wheel_diameter: Mm
+    wheel_diameter: Mm,
+    taken: bool
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Display, EnumIter)]
@@ -114,7 +119,8 @@ impl Vehicle for ElectricScooter {
     }
 
     fn name(&self) -> String {
-        format!("{} id-{}", self.model, self.id)
+        let base = format!("{} id-{}", self.model, self.id);
+        if self.is_taken() { format!("{} (занято)", base) } else { base }
     }
 
     fn get_energy(&self) -> KWh {
@@ -129,12 +135,26 @@ impl Vehicle for ElectricScooter {
         self.model.clone()
     }
 
+    fn is_taken(&self) -> bool {
+        self.taken
+    }
+
+    fn set_taken(self: Rc<Self>, taken: bool) -> Rc<dyn Vehicle> {
+        let mut v = (*self).clone();
+        v.taken = taken;
+        Rc::new(v)
+    }
+
     fn to_string(&self) -> String {
-        format!(
+        let mut s = format!(
             "Тип: электросамокат\nМодель: {}\nID: {}\nЗаряд: {} kWh\nЁмкость: {} kWh\nДиаметр колеса: {} мм\nПростота: {}",
             self.model, self.id, self.energy.0, self.capacity.0,
             self.wheel_diameter.0, self.simplicity()
-        )
+        );
+        if self.is_taken() {
+            s.push_str("\nЗанято");
+        }
+        s
     }
 
     fn techoverview(&self) -> Result<(), FormatError> {
@@ -168,6 +188,7 @@ impl Vehicle for ElectricScooter {
             energy: KWh(parse_f32(areas, 1)?),
             capacity: KWh(parse_f32(areas, 2)?),
             wheel_diameter: Mm(parse_f32(areas, 3)?),
+            taken: self.taken,
         }))
     }
 
@@ -186,6 +207,7 @@ impl Vehicle for ElectricScooter {
             energy: KWh(parse_f32(areas, 1)?),
             capacity: KWh(parse_f32(areas, 2)?),
             wheel_diameter: Mm(parse_f32(areas, 3)?),
+            taken: false,
         }));
         Ok(())
     }
@@ -198,7 +220,8 @@ impl Vehicle for ElectricBike {
     }
 
     fn name(&self) -> String {
-        format!("{} id-{}", self.model, self.id)
+        let base = format!("{} id-{}", self.model, self.id);
+        if self.is_taken() { format!("{} (занято)", base) } else { base }
     }
 
     fn get_energy(&self) -> KWh {
@@ -213,12 +236,26 @@ impl Vehicle for ElectricBike {
         self.model.clone()
     }
 
+    fn is_taken(&self) -> bool {
+        self.taken
+    }
+
+    fn set_taken(self: Rc<Self>, taken: bool) -> Rc<dyn Vehicle> {
+        let mut v = (*self).clone();
+        v.taken = taken;
+        Rc::new(v)
+    }
+
     fn to_string(&self) -> String {
-        format!(
+        let mut s = format!(
             "Тип: электробайк\nМодель: {}\nID: {}\nЗаряд: {} kWh\nЁмкость: {} kWh\nДиаметр колеса: {} мм\nПассажирское место: {}\nПростота: {}",
             self.model, self.id, self.energy.0, self.capacity.0, self.wheel_diameter.0,
             if self.has_passenger_seat { "да" } else { "нет" }, self.simplicity()
-        )
+        );
+        if self.is_taken() {
+            s.push_str("\nЗанято");
+        }
+        s
     }
 
     fn techoverview(&self) -> Result<(), FormatError> {
@@ -251,6 +288,7 @@ impl Vehicle for ElectricBike {
             capacity: KWh(parse_f32(areas, 2)?),
             wheel_diameter: Mm(parse_f32(areas, 3)?),
             has_passenger_seat: parse_bool(areas, 4)?,
+            taken: false,
         }));
         Ok(())
     }
@@ -263,7 +301,8 @@ impl Vehicle for Bicycle {
     }
 
     fn name(&self) -> String {
-        format!("{} id-{}", self.model, self.id)
+        let base = format!("{} id-{}", self.model, self.id);
+        if self.is_taken() { format!("{} (занято)", base) } else { base }
     }
 
     fn get_energy(&self) -> KWh {
@@ -282,11 +321,25 @@ impl Vehicle for Bicycle {
         self.model.clone()
     }
 
+    fn is_taken(&self) -> bool {
+        self.taken
+    }
+
+    fn set_taken(self: Rc<Self>, taken: bool) -> Rc<dyn Vehicle> {
+        let mut v = (*self).clone();
+        v.taken = taken;
+        Rc::new(v)
+    }
+
     fn to_string(&self) -> String {
-        format!(
+        let mut s = format!(
             "Тип: велосипед\nМодель: {}\nID: {}\nДиаметр колеса: {} мм\nПростота: {}",
             self.model, self.id, self.wheel_diameter.0, self.simplicity()
-        )
+        );
+        if self.is_taken() {
+            s.push_str("\nЗанято");
+        }
+        s
     }
 
     fn techoverview(&self) -> Result<(), FormatError> {
@@ -310,6 +363,7 @@ impl Vehicle for Bicycle {
             id: self.id,
             model: model_text(areas, 0)?,
             wheel_diameter: Mm(parse_f32(areas, 1)?),
+            taken: self.taken,
         }))
     }
 
@@ -324,6 +378,7 @@ impl Vehicle for Bicycle {
             id,
             model: model_text(areas, 0)?,
             wheel_diameter: Mm(parse_f32(areas, 1)?),
+            taken: false,
         }));
         Ok(())
     }
@@ -444,10 +499,10 @@ mod test {
 
     #[test]
     fn bicycle_techoverview() {
-        let ok = Bicycle { id: 0, model: "X".to_string(), wheel_diameter: Mm(26.0) };
+        let ok = Bicycle { id: 0, model: "X".to_string(), wheel_diameter: Mm(26.0), taken: false };
         assert!(ok.techoverview().is_ok());
 
-        let absurd = Bicycle { id: 0, model: "X".to_string(), wheel_diameter: Mm(5000.0) };
+        let absurd = Bicycle { id: 0, model: "X".to_string(), wheel_diameter: Mm(5000.0), taken: false };
         assert!(absurd.techoverview().is_err());
     }
 
@@ -455,25 +510,25 @@ mod test {
     fn electric_scooter_techoverview() {
         let ok = ElectricScooter {
             id: 0, model: "X".to_string(), energy: KWh(0.5), capacity: KWh(1.0),
-            wheel_diameter: Mm(8.5),
+            wheel_diameter: Mm(8.5), taken: false,
         };
         assert!(ok.techoverview().is_ok());
 
         let big_wheel = ElectricScooter {
             id: 0, model: "X".to_string(), energy: KWh(0.5), capacity: KWh(1.0),
-            wheel_diameter: Mm(5000.0),
+            wheel_diameter: Mm(5000.0), taken: false,
         };
         assert!(big_wheel.techoverview().is_err());
 
         let big_capacity = ElectricScooter {
             id: 0, model: "X".to_string(), energy: KWh(0.5), capacity: KWh(1000.0),
-            wheel_diameter: Mm(8.5),
+            wheel_diameter: Mm(8.5), taken: false,
         };
         assert!(big_capacity.techoverview().is_err());
 
         let impossible = ElectricScooter {
             id: 0, model: "X".to_string(), energy: KWh(5.0), capacity: KWh(1.0),
-            wheel_diameter: Mm(8.5),
+            wheel_diameter: Mm(8.5), taken: false,
         };
         assert!(impossible.techoverview().is_err());
     }
@@ -482,13 +537,13 @@ mod test {
     fn electric_bike_techoverview() {
         let ok = ElectricBike {
             id: 0, model: "X".to_string(), energy: KWh(0.5), capacity: KWh(1.0),
-            wheel_diameter: Mm(20.0), has_passenger_seat: true,
+            wheel_diameter: Mm(20.0), has_passenger_seat: true, taken: false,
         };
         assert!(ok.techoverview().is_ok());
 
         let absurd = ElectricBike {
             id: 0, model: "X".to_string(), energy: KWh(0.5), capacity: KWh(1.0),
-            wheel_diameter: Mm(100000.0), has_passenger_seat: false,
+            wheel_diameter: Mm(100000.0), has_passenger_seat: false, taken: false,
         };
         assert!(absurd.techoverview().is_err());
     }
@@ -497,7 +552,7 @@ mod test {
     fn electric_scooter_edit_keeps_id_and_updates_fields() {
         let orig = ElectricScooter {
             id: 7, model: "Old".to_string(), energy: KWh(0.5), capacity: KWh(1.0),
-            wheel_diameter: Mm(8.5),
+            wheel_diameter: Mm(8.5), taken: false,
         };
         assert!(orig.is_editable());
         let a = areas(&["New", "0.6", "1.2", "9.0"]);
@@ -510,7 +565,7 @@ mod test {
     fn electric_bike_is_not_editable() {
         let b = ElectricBike {
             id: 0, model: "X".to_string(), energy: KWh(0.5), capacity: KWh(1.0),
-            wheel_diameter: Mm(20.0), has_passenger_seat: false,
+            wheel_diameter: Mm(20.0), has_passenger_seat: false, taken: false,
         };
         assert!(!b.is_editable());
         let a = areas(&["Y", "0.6", "1.2", "21", "no"]);
@@ -519,7 +574,7 @@ mod test {
 
     #[test]
     fn bicycle_edit_keeps_id() {
-        let orig = Bicycle { id: 4, model: "Old".to_string(), wheel_diameter: Mm(26.0) };
+        let orig = Bicycle { id: 4, model: "Old".to_string(), wheel_diameter: Mm(26.0), taken: false };
         assert!(orig.is_editable());
         let a = areas(&["New", "27"]);
         let updated = orig.done_edit(&a).unwrap();

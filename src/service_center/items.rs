@@ -26,6 +26,8 @@ pub trait Item {
     fn is_editable(&self) -> bool {
         false
     }
+    fn is_taken(&self) -> bool;
+    fn set_taken(self: Rc<Self>, taken: bool) -> Rc<dyn Item>;
     fn build_edit_areas(&self, _areas: &mut AreaVec) {}
     fn done_edit(&self, _areas: &AreaVec) -> Result<Rc<dyn Item>, FormatError> {
         Err(FormatError::new("объект не редактируется"))
@@ -38,7 +40,8 @@ pub trait Item {
 pub struct ChargingStation {
     id: u32,
     port_count: u8,
-    charge_speed: Wh
+    charge_speed: Wh,
+    taken: bool
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -67,7 +70,8 @@ impl ClothingSize {
 pub struct Helmet {
     id: u32,
     size: ClothingSize,
-    is_damaged: bool
+    is_damaged: bool,
+    taken: bool
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Display, EnumIter)]
@@ -102,14 +106,29 @@ impl Item for ChargingStation {
     }
 
     fn name(&self) -> String {
-        format!("Зарядная станция #{}", self.id)
+        let base = format!("Зарядная станция #{}", self.id);
+        if self.is_taken() { format!("{} (занято)", base) } else { base }
+    }
+
+    fn is_taken(&self) -> bool {
+        self.taken
+    }
+
+    fn set_taken(self: Rc<Self>, taken: bool) -> Rc<dyn Item> {
+        let mut i = (*self).clone();
+        i.taken = taken;
+        Rc::new(i)
     }
 
     fn to_string(&self) -> String {
-        format!(
+        let mut s = format!(
             "Тип: зарядная станция\nID: {}\nКол-во портов: {}\nСкорость зарядки: {} Wh",
             self.id, self.port_count, self.charge_speed.0
-        )
+        );
+        if self.is_taken() {
+            s.push_str("\nЗанято");
+        }
+        s
     }
 
     fn techoverview(&self) -> Result<(), FormatError> {
@@ -143,6 +162,7 @@ impl Item for ChargingStation {
             id: self.id,
             port_count,
             charge_speed: Wh(charge_speed),
+            taken: self.taken,
         }))
     }
 
@@ -164,6 +184,7 @@ impl Item for ChargingStation {
             id,
             port_count,
             charge_speed: Wh(charge_speed),
+            taken: false,
         }));
         Ok(())
     }
@@ -176,16 +197,31 @@ impl Item for Helmet {
     }
 
     fn name(&self) -> String {
-        format!("Шлем #{}", self.id)
+        let base = format!("Шлем #{}", self.id);
+        if self.is_taken() { format!("{} (занято)", base) } else { base }
+    }
+
+    fn is_taken(&self) -> bool {
+        self.taken
+    }
+
+    fn set_taken(self: Rc<Self>, taken: bool) -> Rc<dyn Item> {
+        let mut i = (*self).clone();
+        i.taken = taken;
+        Rc::new(i)
     }
 
     fn to_string(&self) -> String {
-        format!(
+        let mut s = format!(
             "Тип: шлем\nID: {}\nРазмер: {:?}\nПовреждён: {}",
             self.id,
             self.size,
             if self.is_damaged { "да" } else { "нет" }
-        )
+        );
+        if self.is_taken() {
+            s.push_str("\nЗанято");
+        }
+        s
     }
 
     fn techoverview(&self) -> Result<(), FormatError> {
@@ -201,7 +237,7 @@ impl Item for Helmet {
         let size = ClothingSize::parse(&required_text(areas, 0)?)?;
         let is_damaged = parse_bool(areas, 1)?;
         let id = sc.next_item_id();
-        sc.add_item(Rc::new(Helmet { id, size, is_damaged }));
+        sc.add_item(Rc::new(Helmet { id, size, is_damaged, taken: false }));
         Ok(())
     }
 }
@@ -311,25 +347,25 @@ mod test {
 
     #[test]
     fn charging_station_techoverview() {
-        let ok = ChargingStation { id: 0, port_count: 2, charge_speed: Wh(22.0) };
+        let ok = ChargingStation { id: 0, port_count: 2, charge_speed: Wh(22.0), taken: false };
         assert!(ok.techoverview().is_ok());
 
-        let many_ports = ChargingStation { id: 0, port_count: 64, charge_speed: Wh(22.0) };
+        let many_ports = ChargingStation { id: 0, port_count: 64, charge_speed: Wh(22.0), taken: false };
         assert!(many_ports.techoverview().is_err());
 
-        let fast = ChargingStation { id: 0, port_count: 2, charge_speed: Wh(5000.0) };
+        let fast = ChargingStation { id: 0, port_count: 2, charge_speed: Wh(5000.0), taken: false };
         assert!(fast.techoverview().is_err());
     }
 
     #[test]
     fn helmet_techoverview() {
-        let h = Helmet { id: 0, size: ClothingSize::M, is_damaged: true };
+        let h = Helmet { id: 0, size: ClothingSize::M, is_damaged: true, taken: false };
         assert!(h.techoverview().is_ok());
     }
 
     #[test]
     fn charging_station_edit_keeps_id() {
-        let orig = ChargingStation { id: 3, port_count: 2, charge_speed: Wh(22.0) };
+        let orig = ChargingStation { id: 3, port_count: 2, charge_speed: Wh(22.0), taken: false };
         assert!(orig.is_editable());
         let a = areas(&["4", "50.0"]);
         let updated = orig.done_edit(&a).unwrap();
@@ -338,7 +374,7 @@ mod test {
 
     #[test]
     fn helmet_is_not_editable() {
-        let h = Helmet { id: 0, size: ClothingSize::M, is_damaged: false };
+        let h = Helmet { id: 0, size: ClothingSize::M, is_damaged: false, taken: false };
         assert!(!h.is_editable());
         let a = areas(&["L", "no"]);
         assert!(h.done_edit(&a).is_err());

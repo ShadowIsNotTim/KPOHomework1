@@ -537,6 +537,10 @@ impl App {
                     |sc, ind| { sc.delete_transport(ind); Action::None })
                  .set_key_code_event('e', "редактировать".to_string(),
                     |_sc, ind| Action::Go(PageOption::VehicleEdit(ind)))
+                 .set_key_code_event('t', "взять".to_string(),
+                    |sc, ind| { sc.set_vehicle_taken(ind, true); Action::None })
+                 .set_key_code_event('p', "положить".to_string(),
+                    |sc, ind| { sc.set_vehicle_taken(ind, false); Action::None })
             )),
             PageOption::Inventory => Ok(Page::List(
                 ListPage::new(
@@ -547,6 +551,10 @@ impl App {
                     |sc, ind| { sc.delete_item(ind); Action::None })
                  .set_key_code_event('e', "редактировать".to_string(),
                     |_sc, ind| Action::Go(PageOption::ItemEdit(ind)))
+                 .set_key_code_event('t', "взять".to_string(),
+                    |sc, ind| { sc.set_item_taken(ind, true); Action::None })
+                 .set_key_code_event('p', "положить".to_string(),
+                    |sc, ind| { sc.set_item_taken(ind, false); Action::None })
             )),
             PageOption::AddNewTransport => Ok(Page::List(ListPage::new(
                 "Создание транспорта (выберете что создать)",
@@ -573,7 +581,9 @@ impl App {
                     // раст работает на UTF-8 поэтому поддерживает смайлики нативно 🥳🦄
                     PageOption::MainMenu,
                     ServiceCenter::nublist_options,
-                )))
+                ).set_key_code_event('t', "взять".to_string(),
+                    |sc, ind| { sc.set_beginner_taken(ind, true); Action::None })
+                ))
             },
             PageOption::DataOperations => {
                 Ok(Page::List(ListPage::new(
@@ -592,6 +602,10 @@ impl App {
                         |sc, ind| { sc.delete_reviewed(ind); Action::None })
                      .set_key_code_event('e', "редактировать".to_string(),
                         review_edit_action)
+                     .set_key_code_event('t', "взять".to_string(),
+                        |sc, ind| { sc.set_reviewed_taken(ind, true); Action::None })
+                     .set_key_code_event('p', "положить".to_string(),
+                        |sc, ind| { sc.set_reviewed_taken(ind, false); Action::None })
                 ))
             },
             PageOption::VehicleEdit(ind) => match sc.transport_at(ind) {

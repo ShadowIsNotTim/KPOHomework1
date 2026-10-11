@@ -6,7 +6,8 @@
         "model": "Xiaomi Mi Pro 2",
         "energy": 0.6,
         "capacity": 1.2,
-        "wheel_diameter": 8.5
+        "wheel_diameter": 8.5,
+        "taken": false
       }
     },
     {
@@ -16,14 +17,16 @@
         "energy": 0.9,
         "capacity": 1.8,
         "wheel_diameter": 20.0,
-        "has_passenger_seat": true
+        "has_passenger_seat": true,
+        "taken": false
       }
     },
     {
       "Bicycle": {
         "id": 2,
         "model": "Stels Navigator",
-        "wheel_diameter": 26.0
+        "wheel_diameter": 26.0,
+        "taken": false
       }
     }
   ],
@@ -32,14 +35,16 @@
       "ChargingStation": {
         "id": 0,
         "port_count": 2,
-        "charge_speed": 22.0
+        "charge_speed": 22.0,
+        "taken": false
       }
     },
     {
       "Helmet": {
         "id": 1,
         "size": "M",
-        "is_damaged": false
+        "is_damaged": false,
+        "taken": false
       }
     }
   ]
