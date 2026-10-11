@@ -8,9 +8,9 @@
 
 ## Демо
 
-<video src="demo.mp4" controls muted loop playsinline></video>
+<video src="https://github.com/user-attachments/assets/11f26238-d60f-4e79-b221-e8ff1fecbf3f" controls autoplay loop muted playsinline></video>
 
-Если видео не проигрывается — [скачать demo.mp4](demo.mp4).
+Если видео не проигрывается — [открыть демо](https://github.com/user-attachments/assets/11f26238-d60f-4e79-b221-e8ff1fecbf3f).
 
 ## Что сделал автор
 
